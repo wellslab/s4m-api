@@ -1,0 +1,1 @@
+This directory contains "resources" for the app, where a resource is the Flask-RESTful concept of a view or a route. See [this useful stackoverflow post](https://stackoverflow.com/questions/53777537/using-basic-flask-vs-flask-restful-for-api-development) that compares conventional flask way vs flask-restful way.
