@@ -1,3 +1,6 @@
+# Holds data maninulation scripts.
+/scripts/data_wrangling
+
 # From https://github.com/github/gitignore/blob/master/Python.gitignore
 #
 # Byte-compiled / optimized / DLL files

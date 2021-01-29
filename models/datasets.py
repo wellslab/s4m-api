@@ -15,11 +15,21 @@ def datasetFromDatasetId(datasetId):
     """Return a Dataset instance given datasetId. Returns None if no matching Dataset was found
     in the database.
     """
-    # Unset _id field before returning the dict, since this field's value is ObjectId class which can't be
+    # Don't include _id field, since this its value is ObjectId class which can't be
     # serialised by json, which can create issues downstream, and this field is not needed outside mongo anyway.
     result = database["datasets"].find_one({"dataset_id": datasetId}, {"_id":0})
     return Dataset(result["dataset_id"], metadata=result) if result else None
 
+def datasetIdsFromQuery(**kwargs):
+    """Return a list of ids which match a query.
+    """
+    limit = kwargs.get("limit", 50)
+    platform_type = kwargs.get("platform_type")
+    params = {}
+    if platform_type:
+        params['platform_type'] = platform_type
+    cursor = database["datasets"].find(params, {"dataset_id":1, "_id":0}).limit(limit)
+    return [item["dataset_id"] for item in cursor]
 
 # ----------------------------------------------------------
 # Dataset class
@@ -39,6 +49,19 @@ class Dataset(object):
     3. expression data: may be raw counts, cpm, etc.
     4. processing details: information about how the dataset was processed.
     """
+    
+    # This is the full list of fields associated with dataset metadata
+    dataset_fields = ["dataset_id", "name", "title", "authors", "description", "platform_type", "platform", 
+                      "private", "pubmed_id", "accession", "version"]
+
+    # This is the full list of fields associated with sample metadata
+    sample_fields = ["sample_id", "dataset_id", "cell_type", "parental_cell_type", "final_cell_type", "disease_state", 
+               "organism", "sample_type", "tissue_of_origin", "sample_name_long", "media", "cell_line", "facs_profile", 
+               "sample_description", "age_time", "sex", "reprogramming_method", "genetic_modification",
+               "labelling", "developmental_stage", "treatment", "external_source_id"]
+
+    # All available platform_type
+    platform_types = ["Microarray", "RNASeq", "scRNASeq", "other"]
 
     def __init__(self, datasetId, **kwargs):
         """Initialise a dataset with Id. Note that id is an integer, and will be coherced into one.
@@ -86,6 +109,7 @@ class Dataset(object):
     # expression matrix -------------------------------------
     def expressionMatrix(self, key):
         """Return expression matrix for this dataset as a pandas DataFrame.
+        key is one of ["raw","gene"]
         """
         if key not in self._expressionMatrix:
             self._expressionMatrix[key] = pandas.read_csv(self.expressionFilePath(key), sep="\t", index_col=0)
@@ -103,10 +127,14 @@ class Dataset(object):
 # May have to use export MONGO_URI='xxxx' before running these tests, in order to set environment variables. 
 # See .env file for a full list of variables to set.
 
-def test_datasetMetadata():
+def test_metadata():
     assert datasetFromDatasetId(0) is None
     assert datasetFromDatasetId(2000).metadata()["name"] == "Matigian_2010_20699480"
 
 def test_samples():
     df = datasetFromDatasetId(6003).samples()
-    print(df.iloc[:3,:4])
+    assert df.shape==(9,21)
+    assert df.at["6003_GSM396481", "cell_type"] == "hESC-derived monocyte"
+
+def test_datasetIdsFromQuery():
+    print(datasetIdsFromQuery(limit=2))

@@ -21,32 +21,9 @@ siblings. Eg. For dataset 1000, we have 9 cleaned up samples and 41 unclean samp
 
 """
 import pandas, sys, os
-from utilities import mongoClient
+from models import utilities, datasets
 
-database = mongoClient()["dataportal"]
-
-def backupCollectionToCSV(database, collection, filepath):
-    """Make a backup of a collection in database to a tsv file at filepath. Example:
-    backupCollectionToSCV("dataportal", "samples", "samples_20210102.tsv")
-    """
-    collection = mongoClient()[database][collection]
-    df = pandas.DataFrame(collection.find({},{"_id":0}))
-    df.to_csv(filepath, sep="\t", index=False)
-
-def createCollectionFromCSV(database, collection, filepath):
-    """Create a collection in database, given tsv file in filepath. Example:
-    createCollectionFromCSV("dataportal", "samples", "samples_20210102.tsv").
-    If collection already exists, you'll have to confirm that you want to delete all records in it first.
-    """
-    collection = mongoClient()[database][collection]
-    df = pandas.read_csv(filepath, sep="\t")
-
-    if collection.count_documents({})>0:
-        confirm = input("This collection contains documents. Are you sure you want to delete all before inserting new documents? (y/[n])\n")
-        if confirm!="y": return
-
-    collection.drop()
-    collection.insert_many(df.to_dict("records"))
+database = utilities.mongoClient()["dataportal"]
 
 def convertBiosamplesMetadata(infile, outfile):
     """Given a dump of the old stemformatics biosamples_metadata table, in the form of a tab separated file (infile),
@@ -71,10 +48,7 @@ def convertBiosamplesMetadata(infile, outfile):
 
     """
     # columns we will end up in the outfile matrix (sample_id will be the index)
-    columns = ["sample_id", "dataset_id", "cell_type", "parental_cell_type", "final_cell_type", "disease_state", 
-               "organism", "sample_type", "tissue_of_origin", "sample_name_long", "media", "cell_line", "facs_profile", 
-               "sample_description", "age_time", "sex", "reprogramming_method", "genetic_modification",
-               "labelling", "developmental_stage", "treatment", "external_source_id"]
+    columns = datasets.Dataset.sample_fields
 
     # Read infile, which has the long format (md_name, md_value)
     df = pandas.read_csv(infile, sep="\t")
@@ -127,8 +101,10 @@ def checkMissingData(publicDatasetsOnly=False):
     print("\nDataset ids from metadata missing from samples", len(diff1), list(diff1)[:3])
     print("Dataset ids from metadata missing from expression", len(diff2), list(diff2)[:3])
 
-    print("\nDataset ids from samples missing from metadata", len(datasetIdsFromSamples.difference(datasetIdsFromMetadata)))
-    print("Dataset ids from samples missing from expression", len(datasetIdsFromSamples.difference(datasetIdsFromExpression)))
+    diff1 = datasetIdsFromSamples.difference(datasetIdsFromMetadata)
+    diff2 = datasetIdsFromSamples.difference(datasetIdsFromExpression)
+    print("\nDataset ids from samples missing from metadata", len(diff1), list(diff1)[:3])
+    print("Dataset ids from samples missing from expression", len(diff2), list(diff2)[:3])
 
     diff1 = datasetIdsFromExpression.difference(datasetIdsFromMetadata)
     diff2 = datasetIdsFromExpression.difference(datasetIdsFromSamples)
@@ -171,7 +147,6 @@ def fixDatasetCollection_20201231():
     collection.update_many({},{'$unset': {'number_of_samples':1}}, upsert=False)
     ds = datasetFromDatasetId(2000)
     print(ds.metadata())
-
 
 def checkDataFromCatherine_20210101(filepath):
     """Check the data in filepath (given to us by Catherine, Dec 2020), for datasets where only some of the samples
@@ -231,13 +206,18 @@ def compareExpressionMatrixLoadingTimes_20210102():
     print(df.shape)
 
 
+def updateDataset_20210118():
+    """Noticed a dataset which should be public is private. Fixing this.
+    """
+    result = database["datasets"].find_one({"dataset_id": 7179}, {"_id":0})
+    print(result)
+    result = database["datasets"].update_one({"dataset_id": 7179}, 
+        {"$set": {"private":False, "pubmed_id":"32415101"}}, upsert=False)
+
+
 if __name__=="__main__":
     if sys.argv[1]=="convertBiosamplesMetadata":
         convertBiosamplesMetadata(sys.argv[2], sys.argv[3])
-    elif sys.argv[1]=="backupCollectionToCSV":
-        backupCollectionToCSV(sys.argv[2], sys.argv[3], sys.argv[4])
-    elif sys.argv[1]=="createCollectionFromCSV":
-        createCollectionFromCSV(sys.argv[2], sys.argv[3], sys.argv[4])
     elif sys.argv[1]=="checkMissingData":
         checkMissingData(publicDatasetsOnly=len(sys.argv)>2 and sys.argv[2]=='publicOnly')
 
@@ -249,5 +229,9 @@ if __name__=="__main__":
         checkDataFromCatherine_20210101(sys.argv[2])
     elif sys.argv[1]=="compareExpressionMatrixLoadingTimes_20210102":
         compareExpressionMatrixLoadingTimes_20210102()
+    elif sys.argv[1]=="updateDataset_20210118":
+        updateDataset_20210118()
+    elif sys.argv[1]=="getMissingExpressionDataFiles_20210120":
+        getMissingExpressionDataFiles_20210120()
     else:
         print("Unknown function.")
