@@ -79,39 +79,6 @@ def convertBiosamplesMetadata(infile, outfile):
     
     newdf.to_csv(outfile, sep="\t")
 
-def checkMissingData(publicDatasetsOnly=False):
-    """Function to check for inconsistencies, where dataset metadata may have datasets with no corresponding
-    sample table, for example.
-    """
-    import re
-    option = {'private':False} if publicDatasetsOnly else {}
-    datasetIdsFromMetadata = set([item["dataset_id"] for item in database["datasets"].find(option)])
-    datasetIdsFromSamples = set([item["dataset_id"] for item in database["samples"].find({})])
-    datasetIdsFromExpression = set()
-    for item in os.listdir(os.environ.get("EXPRESSION_FILEPATH")):
-        match = re.findall("^\d{4}", item)
-        if len(match)>0: datasetIdsFromExpression.add(int(match[0]))
-
-    print("Number of dataset ids from metadata", len(datasetIdsFromMetadata))
-    print("Number of dataset ids from samples", len(datasetIdsFromSamples))
-    print("Number of dataset ids from expression", len(datasetIdsFromExpression))
-
-    diff1 = datasetIdsFromMetadata.difference(datasetIdsFromSamples)
-    diff2 = datasetIdsFromMetadata.difference(datasetIdsFromExpression)
-    print("\nDataset ids from metadata missing from samples", len(diff1), list(diff1)[:3])
-    print("Dataset ids from metadata missing from expression", len(diff2), list(diff2)[:3])
-
-    diff1 = datasetIdsFromSamples.difference(datasetIdsFromMetadata)
-    diff2 = datasetIdsFromSamples.difference(datasetIdsFromExpression)
-    print("\nDataset ids from samples missing from metadata", len(diff1), list(diff1)[:3])
-    print("Dataset ids from samples missing from expression", len(diff2), list(diff2)[:3])
-
-    diff1 = datasetIdsFromExpression.difference(datasetIdsFromMetadata)
-    diff2 = datasetIdsFromExpression.difference(datasetIdsFromSamples)
-    print("\nDataset ids from expression missing from metadata", len(diff1), list(diff1)[:3])
-    print("Dataset ids from expression missing from samples", len(diff2), list(diff2)[:3])
-
-
 # ----------------------------------------------------------
 # Collection of mostly one-off functions, kept here for history
 # ----------------------------------------------------------

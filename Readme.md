@@ -9,3 +9,5 @@ conda install pymongo
 conda install nose
 conda install -c conda-forge python-dotenv
 conda install pandas
+
+nohup waitress-serve --port=5000 app:app > app.log 2>&1 &

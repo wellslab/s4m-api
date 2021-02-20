@@ -1,7 +1,7 @@
 from flask_restful import reqparse, Resource
 
 from models import datasets
-from bson.json_util import loads, dumps
+#from bson.json_util import loads, dumps
 
 class DatasetMetadata(Resource):
     def get(self, datasetId):
@@ -12,7 +12,7 @@ class DatasetMetadata(Resource):
             return None
         return ds.metadata()
 
-class Samples(Resource):
+class DatasetSamples(Resource):
     def get(self, datasetId):
         """Return sample table for a dataset with datasetId.
         Parameters:
@@ -37,10 +37,40 @@ class Samples(Resource):
         else:
             return {}
 
-class Metadata(Resource):
-    def get(self, item):
-        """Return metadata such as platform_types.
+class DatasetExpression(Resource):
+    def get(self, datasetId):
+        """Return expression table for a dataset with datasetId.
         """
-        if item=="platform_types":
-            return datasets.Dataset.platform_types
         return {}
+
+class DatasetGovernance(Resource):
+    def get(self, datasetId):
+        """Return governmence data for a dataset with datasetId.
+        """
+        return {}
+
+class ValuesDatasets(Resource):
+    def get(self, key):
+        """Return all values for a key (=field) in the datasets collection.
+        """
+        parser = reqparse.RequestParser()
+        parser.add_argument('include_count', type=bool, required=False, default=False)
+        args = parser.parse_args()
+
+        if args.get('include_count'):
+            return datasets.allValues("datasets", key, includeCount=True).to_dict()
+        else:
+            return sorted(datasets.allValues("datasets", key))
+
+class ValuesSamples(Resource):
+    def get(self, key):
+        """Return all values for a key (=field) in the samples collection.
+        """
+        parser = reqparse.RequestParser()
+        parser.add_argument('include_count', type=bool, required=False, default=False)
+        args = parser.parse_args()
+
+        if args.get('include_count'):
+            return datasets.allValues("samples", key, includeCount=True).to_dict()
+        else:
+            return sorted(datasets.allValues("samples", key))

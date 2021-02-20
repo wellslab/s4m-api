@@ -1,6 +1,10 @@
 """
-To run this script (ensure you're in the application directory):
+Examples of how to run this script (ensure you're in the application directory):
 (s4m-api) [ec2-user@api-dev s4m-api]$ python -m scripts.backup_and_restore backupCollectionToCSV dataportal datasets /mnt/stemformatics-data/backups/datasets_20210129.tsv
+(s4m-api) [ec2-user@api-dev s4m-api]$ python -m scripts.backup_and_restore createCollectionFromCSV dataportal datasets /mnt/stemformatics-data/backups/datasets_20210129.tsv
+
+In the first example, a tsv file is created from dataportal.datasets collection, while the reverse happens in the second example.
+Since this will delete the existing collection first, you have to confirm this if the collection exits. 
 """
 
 import os, sys, pandas

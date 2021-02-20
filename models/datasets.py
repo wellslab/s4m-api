@@ -21,15 +21,61 @@ def datasetFromDatasetId(datasetId):
     return Dataset(result["dataset_id"], metadata=result) if result else None
 
 def datasetIdsFromQuery(**kwargs):
-    """Return a list of ids which match a query.
+    """Return a list of dataset ids which match a query.
     """
-    limit = kwargs.get("limit", 50)
+    limit = kwargs.get("limit")
     platform_type = kwargs.get("platform_type")
-    params = {}
+    params = {"private": False} # return only public datasets currently
     if platform_type:
         params['platform_type'] = platform_type
-    cursor = database["datasets"].find(params, {"dataset_id":1, "_id":0}).limit(limit)
+
+    if limit:
+        cursor = database["datasets"].find(params, {"dataset_id":1, "_id":0}).limit(limit)
+    else:
+        cursor = database["datasets"].find(params, {"dataset_id":1, "_id":0})
+
     return [item["dataset_id"] for item in cursor]
+
+def samplesFromQuery(**kwargs):
+    """Return DataFrame of samples which match a query.
+    """
+    limit = kwargs.get("limit")
+    cell_type = kwargs.get("cell_type")
+
+    # Only returning samples which belong to public datasets currently
+    dsIds = datasetIdsFromQuery()
+    params = {"dataset_id": {"$in": dsIds}}
+
+    if cell_type:
+        params['cell_type'] = cell_type
+
+    if limit:
+        cursor = database["samples"].find(params, {"_id":0}).limit(limit)
+    else:
+        cursor = database["samples"].find(params, {"_id":0})
+
+    df = pandas.DataFrame(cursor).set_index("sample_id") if cursor.count()!=0 else pandas.DataFrame()
+    return df
+
+def allValues(collection, key, includeCount=False):
+    """Return a set of all the values for a key in a collection.
+    Eg: allValues("samples", "sex") returns {'', 'female', 'male'}
+    If includeCount is True, returns a pandas Series that includes count of each value
+    """
+    # Only returning datasets/samples which belong to public datasets currently
+    if collection=="datasets":
+        params = {"private": False}
+    elif collection=="samples":
+        params = {"dataset_id": {"$in": datasetIdsFromQuery()}}
+    else: # unknown collection
+        return set.Set()
+
+    cursor = database[collection].find(params, {key:1, "_id":0})
+    values = ["" if pandas.isnull(item[key]) else item[key] for item in cursor]
+    if includeCount:
+        return pandas.Series(values).value_counts()
+    else:
+        return set(values)
 
 # ----------------------------------------------------------
 # Dataset class
@@ -107,18 +153,18 @@ class Dataset(object):
         return self._samples
 
     # expression matrix -------------------------------------
-    def expressionMatrix(self, key):
+    def expressionMatrix(self, key="raw"):
         """Return expression matrix for this dataset as a pandas DataFrame.
         key is one of ["raw","gene"]
         """
         if key not in self._expressionMatrix:
-            self._expressionMatrix[key] = pandas.read_csv(self.expressionFilePath(key), sep="\t", index_col=0)
+            self._expressionMatrix[key] = pandas.read_csv(self.expressionFilePath(key=key), sep="\t", index_col=0)
         return self._expressionMatrix[key]
 
-    def expressionFilePath(self, key):
+    def expressionFilePath(self, key="raw"):
         """Return the full path to the expression file.
         """
-        return os.path.join(os.environ["EXPRESSION_FILEPATH"], "%s.%s.tsv" % (self.datasetId, key))
+        return os.path.join(os.environ["EXPRESSION_FILEPATH"], "%s/%s.%s.tsv" % (self.datasetId, self.datasetId, key))
 
 
 # ----------------------------------------------------------
@@ -138,3 +184,9 @@ def test_samples():
 
 def test_datasetIdsFromQuery():
     print(datasetIdsFromQuery(limit=2))
+
+def test_samplesFromQuery():
+    print(samplesFromQuery(limit=5))
+
+def test_allValues():
+    print(allValues("samples", "sex"))
