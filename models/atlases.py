@@ -9,7 +9,7 @@ Examle usage:
 atlas = Atlas('myeloid')
 print(atlas.pcaCoordinates().head())
 """
-import os, pandas
+import os, pandas, json
 
 class Atlas(object):
 
@@ -23,10 +23,12 @@ class Atlas(object):
         self.atlasType = atlasType
 
     def pcaCoordinates(self):
-        """Return a pandas DataFrame object, specifying the PCA coordinates. The shape of the data frame will be
-        number_of_samples x 3, with sample ids as index. There's no guarrantee columns will be named.
+        """Return a pandas DataFrame object, specifying the PCA coordinates. The data frame will have sample ids as index.
+        Columns will be named as ['0','1',...] (as strings).
         """
-        return pandas.read_csv(os.path.join(self.atlasFilePath, "coordinates.tsv"), sep="\t", index_col=0)   
+        df = pandas.read_csv(os.path.join(self.atlasFilePath, "coordinates.tsv"), sep="\t", index_col=0)
+        df.columns = [str(i) for i in range(len(df.columns))]
+        return df
 
     def expressionFilePath(self, filtered=False):
         filename = "expression.filtered.tsv" if filtered else "expression.tsv"
@@ -56,30 +58,16 @@ class Atlas(object):
         """Return a pandas DataFrame of information about all genes in the atlas, after reading the genes.tsv
         file in the atlas file directory. Ensembl ids form the index.
         """
-        return pandas.read_csv(os.path.join(self.atlasFilePath, "genes.tsv"), sep="\t", index_col=0)
+        df = pandas.read_csv(os.path.join(self.atlasFilePath, "genes.tsv"), sep="\t", index_col=0)
+        df.index.name = 'ensembl'
+        return df
 
     def coloursAndOrdering(self):
         """Return dictionaries of colours and ordering of sample type items based on "colours.tsv" file inside the
         atlas file directory. Return empty dictionaries if such a file doesn't exist.
         """
         filepath = os.path.join(self.atlasFilePath, "colours.tsv")
-        colours, ordering = {}, {}
-        if os.path.exists(filepath):
-            values = {}
-            for line in open(filepath).read().split("\n"):
-                if line=="": continue   # ignore blanks
-                if line.startswith("###"):  # sample type
-                    key = line.replace("###","").strip()
-                    colours[key] = {}
-                    ordering[key] = []
-                else:   # sample type items
-                    if line.startswith("----"):  # blank line, used to create a gap in the display
-                        ordering[key].append("")
-                    else:   # sample type item and colour
-                        items = line.split("\t")
-                        colours[key][items[0]] = items[1]
-                        ordering[key].append(items[0])
-        return {"colours":colours, "ordering":ordering}
+        return json.loads(open(filepath).read()) if os.path.exists(filepath) else {}
 
     def projection(self, name, testData, includeCombinedCoords=True):
         """Perform projection of testData onto this atlas and return a dictionary of objects.

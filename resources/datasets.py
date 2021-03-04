@@ -1,16 +1,19 @@
 from flask_restful import reqparse, Resource
 
 from models import datasets
-#from bson.json_util import loads, dumps
+from resources.errors import DatasetIdNotFoundError
 
 class DatasetMetadata(Resource):
     def get(self, datasetId):
         """Return dataset metadata for a dataset with datasetId.
-        """        
-        ds = datasets.datasetFromDatasetId(datasetId)
-        if ds and ds.isPrivate():
-            return None
-        return ds.metadata()
+        """
+        try:
+            ds = datasets.Dataset(datasetId)
+            if ds and ds.isPrivate():
+                return None
+            return ds.metadata()
+        except datasets.DatasetIdNotFoundError:
+            raise DatasetIdNotFoundError
 
 class DatasetSamples(Resource):
     def get(self, datasetId):
@@ -24,7 +27,7 @@ class DatasetSamples(Resource):
         parser.add_argument('na', type=str, required=False, default="")
         args = parser.parse_args()
 
-        ds = datasets.datasetFromDatasetId(datasetId)
+        ds = datasets.Dataset(datasetId)
         if ds and ds.isPrivate():
             return None
         
@@ -39,15 +42,36 @@ class DatasetSamples(Resource):
 
 class DatasetExpression(Resource):
     def get(self, datasetId):
-        """Return expression table for a dataset with datasetId.
+        """Return expression table for a dataset with datasetId and gene id(s).
         """
-        return {}
+        parser = reqparse.RequestParser()
+        parser.add_argument('gene_id', type=str, required=False, default="", action="append")
+        parser.add_argument('key', type=str, required=False, default="raw")
+        parser.add_argument('orient', type=str, required=False, default="records")
+        args = parser.parse_args()
+
+        ds = datasets.Dataset(datasetId)
+        return ds.expressionMatrix().loc[args.get('gene_id')].to_dict(orient=args.get('orient'))
 
 class DatasetGovernance(Resource):
     def get(self, datasetId):
         """Return governmence data for a dataset with datasetId.
         """
         return {}
+
+class DatasetPca(Resource):
+    def get(self, datasetId):
+        """Return pca data for a dataset with datasetId.
+        """
+        parser = reqparse.RequestParser()
+        parser.add_argument('orient', type=str, required=False, default="records")
+        args = parser.parse_args()
+
+        ds = datasets.Dataset(datasetId)
+        if ds and ds.isPrivate():
+            return None
+        return {'coordinates': ds.pcaCoordinates().to_dict(orient=args.get('orient')), 
+                'attributes': ds.pcaAttributes().to_dict(orient=args.get('orient'))}
 
 class ValuesDatasets(Resource):
     def get(self, key):

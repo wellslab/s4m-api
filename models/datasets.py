@@ -11,15 +11,6 @@ database = mongoClient()["dataportal"]
 # Functions
 # ----------------------------------------------------------
 
-def datasetFromDatasetId(datasetId):
-    """Return a Dataset instance given datasetId. Returns None if no matching Dataset was found
-    in the database.
-    """
-    # Don't include _id field, since this its value is ObjectId class which can't be
-    # serialised by json, which can create issues downstream, and this field is not needed outside mongo anyway.
-    result = database["datasets"].find_one({"dataset_id": datasetId}, {"_id":0})
-    return Dataset(result["dataset_id"], metadata=result) if result else None
-
 def datasetIdsFromQuery(**kwargs):
     """Return a list of dataset ids which match a query.
     """
@@ -87,6 +78,11 @@ class DatasetIdNotFoundError(Exception):
     """
     pass
 
+class ExpressionFilePathNotFoundError(Exception):
+    """Use this when EXPRESSION_FILEPATH is not found in os.environ when trying to access expression data.
+    """
+    pass
+
 class Dataset(object):
     """Main class to encapsulate a dataset in Stemformatics. 
     Each dataset has a unique id, and we can associate 4 types of entities to a dataset:
@@ -109,21 +105,19 @@ class Dataset(object):
     # All available platform_type
     platform_types = ["Microarray", "RNASeq", "scRNASeq", "other"]
 
-    def __init__(self, datasetId, **kwargs):
+    def __init__(self, datasetId):
         """Initialise a dataset with Id. Note that id is an integer, and will be coherced into one.
         """
         self.datasetId = int(datasetId)
-        self._metadata = kwargs.get('metadata')
         self._samples = None
         self._expressionMatrix = {}
 
         # Make a query to database for dataset metadata now, so if we try to create an instance with 
         # no matching dataset id, we can throw an exception
-        if self._metadata is None:  # make a query to db and fetch this, throw exception if no matching datasetId found
-            result = database["datasets"].find_one({"dataset_id": self.datasetId}, {"_id":0})
-            if not result:
-                raise DatasetIdNotFoundError("No matching dataset id found in database:<%s>" % self.datasetId)
-            self._metadata = result
+        result = database["datasets"].find_one({"dataset_id": self.datasetId}, {"_id":0})
+        if not result:
+            raise DatasetIdNotFoundError("No matching dataset id found in database:<%s>" % self.datasetId)
+        self._metadata = result
 
     def __repr__(self):
         return "<Dataset id={0.datasetId}>".format(self)
@@ -159,12 +153,34 @@ class Dataset(object):
         """
         if key not in self._expressionMatrix:
             self._expressionMatrix[key] = pandas.read_csv(self.expressionFilePath(key=key), sep="\t", index_col=0)
+            # Until we fix columns of expression matrix to match sample_id from database, we need to prefix dataset id
+            self._expressionMatrix[key].columns = ["%s_%s" % (self.datasetId, col) for col in self._expressionMatrix[key].columns]
         return self._expressionMatrix[key]
 
     def expressionFilePath(self, key="raw"):
         """Return the full path to the expression file.
         """
+        if "EXPRESSION_FILEPATH" not in os.environ:
+            raise ExpressionFilePathNotFoundError("EXPRESSION_FILEPATH not found in os.environ.")
         return os.path.join(os.environ["EXPRESSION_FILEPATH"], "%s/%s.%s.tsv" % (self.datasetId, self.datasetId, key))
+
+    # pca data -------------------------------------
+    def pcaCoordinates(self):
+        """Return PCA coordinates as a pandas DataFrame object.
+        """
+        filepath = os.path.join(os.environ["EXPRESSION_FILEPATH"], "%s/%s.pca.tsv" % (self.datasetId, self.datasetId))
+        df = pandas.read_csv(filepath, sep="\t", index_col=0) if os.path.exists(filepath) else pandas.DataFrame()
+
+        # Until we fix columns of expression matrix to match sample_id from database, we need to prefix dataset id
+        df.index = ["%s_%s" % (self.datasetId, index) for index in df.index]
+
+        return df
+
+    def pcaAttributes(self):
+        """Return PCA attributes, such as amount of variance explained by each component, as a pandas DataFrame object.
+        """
+        filepath = os.path.join(os.environ["EXPRESSION_FILEPATH"], "%s/%s.pca_attributes.tsv" % (self.datasetId, self.datasetId))
+        return pandas.read_csv(filepath, sep="\t", index_col=0) if os.path.exists(filepath) else pandas.DataFrame()
 
 
 # ----------------------------------------------------------

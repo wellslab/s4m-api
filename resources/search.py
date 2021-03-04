@@ -12,7 +12,7 @@ class SearchDatasets(Resource):
         args = parser.parse_args()
 
         datasetIds = datasets.datasetIdsFromQuery(platform_type=args.get("platform_type"), limit=args.get("limit"))
-        df = pandas.DataFrame.from_records([datasets.datasetFromDatasetId(dsId).metadata() for dsId in datasetIds])
+        df = pandas.DataFrame.from_records([datasets.Dataset(dsId).metadata() for dsId in datasetIds])
         
         # Add some derived columns for convenience
         displayNames, pubmedIds = [], []
@@ -31,7 +31,13 @@ class SearchSamples(Resource):
         
         parser = reqparse.RequestParser()
         parser.add_argument('cell_type', type=str, required=False)
+        parser.add_argument('format', type=str, required=False)
         args = parser.parse_args()
+
+        if args.get('format')=='sunburst':
+            import pandas, os
+            df = pandas.read_csv(os.path.join(os.environ["ATLAS_FILEPATH"],'sunburst1.tsv'), sep='\t').fillna("")
+            return df.to_dict(orient='list')
 
         df = datasets.samplesFromQuery(cell_type=args.get("cell_type"))
         df = df.fillna("")        
