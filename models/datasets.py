@@ -4,6 +4,7 @@ data, including sample tables and expression matrix files. Atlas data are handle
 """
 import pymongo, os, pandas
 from models.utilities import mongoClient
+from models.atlases import Atlas
 
 database = mongoClient()["dataportal"]
 
@@ -11,42 +12,50 @@ database = mongoClient()["dataportal"]
 # Functions
 # ----------------------------------------------------------
 
-def datasetIdsFromQuery(**kwargs):
-    """Return a list of dataset ids which match a query.
+def datasetMetadataFromQuery(**kwargs):
+    """Return DataFrame of dataset metadata which match a query. Rows will have dataset ids,
+    while columns will be attributes of dataset metadata. Use this instead of Dataset instance
+    for fetching large numbers of datasets.
+    If idsOnly=True, only a list of dataset ids will be returned, instead of a DataFrame.
     """
     limit = kwargs.get("limit")
+    dataset_id = kwargs.get("dataset_id")
+    query_string = kwargs.get("query_string")
     platform_type = kwargs.get("platform_type")
+    projects = kwargs.get("projects")
+
     params = {"private": False} # return only public datasets currently
+    attributes = {"dataset_id":1, "_id":0} if kwargs.get("idsOnly")==True else {"_id":0}
+
+    if dataset_id:
+        params['dataset_id'] = {"$in": [int(item) for item in dataset_id]}
     if platform_type:
         params['platform_type'] = platform_type
+    if projects:
+        if projects=='atlas':  # any atlas project
+            params["projects"] = {"$in":["%s_atlas" % atlasType for atlasType in Atlas.all_atlas_types]}
+        else:
+            params["projects"] = {"$in":[projects]}
+    if query_string:
+        params['$text'] = {"$search": query_string}
 
     if limit:
-        cursor = database["datasets"].find(params, {"dataset_id":1, "_id":0}).limit(limit)
+        cursor = database["datasets"].find(params, attributes).limit(limit)
     else:
-        cursor = database["datasets"].find(params, {"dataset_id":1, "_id":0})
+        cursor = database["datasets"].find(params, attributes)
+    
+    if kwargs.get("idsOnly")==True:
+        return [item["dataset_id"] for item in cursor]
+    else:
+        return pandas.DataFrame(cursor).set_index("dataset_id") if cursor.count()!=0 else pandas.DataFrame()
 
-    return [item["dataset_id"] for item in cursor]
-
-def samplesFromQuery(**kwargs):
-    """Return DataFrame of samples which match a query.
+def samplesFromDatasetIds(datasetIds):
+    """Return DataFrame of samples which belong to datasets with datasetIds.
+    Assumes that datasetIds only contain public datasets.
     """
-    limit = kwargs.get("limit")
-    cell_type = kwargs.get("cell_type")
-
-    # Only returning samples which belong to public datasets currently
-    dsIds = datasetIdsFromQuery()
-    params = {"dataset_id": {"$in": dsIds}}
-
-    if cell_type:
-        params['cell_type'] = cell_type
-
-    if limit:
-        cursor = database["samples"].find(params, {"_id":0}).limit(limit)
-    else:
-        cursor = database["samples"].find(params, {"_id":0})
-
-    df = pandas.DataFrame(cursor).set_index("sample_id") if cursor.count()!=0 else pandas.DataFrame()
-    return df
+    params = {"dataset_id": {"$in": datasetIds}}
+    cursor = database["samples"].find(params, {"_id":0})
+    return pandas.DataFrame(cursor).set_index("sample_id") if cursor.count()!=0 else pandas.DataFrame()
 
 def allValues(collection, key, includeCount=False):
     """Return a set of all the values for a key in a collection.
@@ -57,7 +66,7 @@ def allValues(collection, key, includeCount=False):
     if collection=="datasets":
         params = {"private": False}
     elif collection=="samples":
-        params = {"dataset_id": {"$in": datasetIdsFromQuery()}}
+        params = {"dataset_id": {"$in": datasetMetadataFromQuery(idsOnly=True)}}
     else: # unknown collection
         return set.Set()
 
@@ -67,6 +76,50 @@ def allValues(collection, key, includeCount=False):
         return pandas.Series(values).value_counts()
     else:
         return set(values)
+
+def sunburstData(dataFrame, childKey='final_cell_type', parentKey='parental_cell_type',
+                   parentCutoff=12, childCutoff=16, sep='_', includeOther=False):
+    """Return a pandas DataFrame that can be used as input to sunburst plot.
+    """
+    topParents = dataFrame[parentKey].value_counts()[:parentCutoff].index
+    
+    # Find children with highest numbers from topParent
+    df = dataFrame[dataFrame[parentKey].isin(topParents)]
+    children = df[childKey].value_counts()[:childCutoff].index
+                
+    subset = df if includeOther else df[df[childKey].isin(children)]
+    # If a parent has only one child, remove this key
+    s = subset.groupby(parentKey)[childKey].unique()  
+        # - creates a series with parentKey value as index, and list of uniquely matching childKey values
+    parentsToKeep = [key for key,val in s.items() if len(val)>1]
+    subset = subset[subset[parentKey].isin(parentsToKeep)]
+
+    # Create a dictionary that counts number of samples for each child, which is actually
+    # a combination of parent_child, because child may be duplicated (same child occurs under a different parent)
+    # and each child must have a unique id.
+    combo = {}
+    for index,row in subset.iterrows():
+        child = row[childKey] if not includeOther or row[childKey] in children else 'other'
+        key = "%s%s%s" % (row[parentKey], sep, child)
+        if key not in combo:
+            combo[key] = []
+        combo[key].append(index)
+
+    # combo.keys() gives us the id to use for sunburst labels. 
+    # Create a data frame we can use for sunburst plot.
+    df = pandas.DataFrame(index=list(combo.keys()), columns=['labels','parents','values'])
+    df.index.name = 'ids'
+    for key,val in combo.items():
+        df.at[key,'labels'] = key.split(sep)[1]
+        df.at[key,'parents'] = key.split(sep)[0]
+        df.at[key,'values'] = val
+    
+    # if a parent is not found existing childKey though, we need to add them also
+    parentsWithoutLabels = [item for item in df['parents'].unique() if item not in df.index]
+    for item in parentsWithoutLabels:
+        df.at[item] = [item, '', sum(df[df['parents']==item]['values'].tolist(),[])]
+
+    return df
 
 # ----------------------------------------------------------
 # Dataset class
@@ -198,8 +251,8 @@ def test_samples():
     assert df.shape==(9,21)
     assert df.at["6003_GSM396481", "cell_type"] == "hESC-derived monocyte"
 
-def test_datasetIdsFromQuery():
-    print(datasetIdsFromQuery(limit=2))
+def test_datasetMetadataFromQuery():
+    print(datasetMetadataFromQuery(limit=2))
 
 def test_samplesFromQuery():
     print(samplesFromQuery(limit=5))

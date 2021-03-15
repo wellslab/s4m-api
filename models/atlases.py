@@ -13,6 +13,9 @@ import os, pandas, json
 
 class Atlas(object):
 
+    # Full list of current atlas types
+    all_atlas_types = ['myeloid','blood','dc']
+
     def __init__(self, atlasType):
         # each atlas type is under its own directory under ATLAS_FILEPATH
         self.atlasFilePath = os.path.join(os.environ["ATLAS_FILEPATH"], atlasType)
@@ -42,11 +45,11 @@ class Atlas(object):
         df = pandas.read_csv(self.expressionFilePath(filtered=filtered), sep="\t", index_col=0)
         return df.loc[geneIds]
 
-    def sampleIds(self):
-        """Return all sample ids in this atlas as a pandas Series object.
-         These should be in the form of "sample_id;dataset_id"
+    def datasetIds(self):
+        """Return all dataset ids in this atlas as a list. Note that each element will be integer type.
+         Relies on sample ids in the form of "datasetId_sampleId", matching the format of sampleId in sample data.
         """
-        return self.pcaCoordinates().index
+        return [int(item.split("_")[0]) for item in self.sampleMatrix().index]
 
     def sampleMatrix(self):
         """Return sample annotation matrix for the atlas as a pandas DataFrame object. The shape of the data frame

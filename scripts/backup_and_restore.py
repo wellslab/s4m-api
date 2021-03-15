@@ -34,6 +34,18 @@ def createCollectionFromCSV(database, collection, filepath):
 
     collection.drop()
     collection.insert_many(df.to_dict("records"))
+    createTextIndex(database, collection)
+
+def createTextIndex(database, collection):
+    """Create text index on a collection.
+    """
+    if collection=='datasets':
+        index_cols = ['title', 'authors', 'description', 'platform']
+    elif collection=='samples':
+        index_cols = [item for item in datasets.Dataset.sample_fields if item not in ['sample_id']]
+
+    collection = utilities.mongoClient()[database][collection]
+    collection.create_index([(item,'text') for item in index_cols])
 
 
 if __name__=="__main__":
@@ -41,3 +53,5 @@ if __name__=="__main__":
         backupCollectionToCSV(sys.argv[2], sys.argv[3], sys.argv[4])
     elif sys.argv[1]=="createCollectionFromCSV":
         createCollectionFromCSV(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif sys.argv[1]=="createTextIndex":
+        createTextIndex(sys.argv[2], sys.argv[3])

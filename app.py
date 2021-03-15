@@ -2,8 +2,8 @@ from flask import Flask
 from flask_restful import Api
 import logging
 
-from resources.datasets import DatasetMetadata, DatasetSamples, DatasetExpression, DatasetGovernance, DatasetPca, ValuesDatasets, ValuesSamples
-from resources.search import SearchDatasets, SearchSamples
+from resources.datasets import DatasetMetadata, DatasetSamples, DatasetExpression, DatasetGovernance, DatasetPca, DatasetSearch,\
+                               ValuesDatasets, ValuesSamples
 from resources.atlases import Atlas
 from resources.genes import Geneset
 from resources.errors import errors
@@ -21,8 +21,7 @@ api.add_resource(DatasetGovernance, '/datasets/<int:datasetId>/governance')
 api.add_resource(DatasetPca, '/datasets/<int:datasetId>/pca')
 
 # Perform search
-api.add_resource(SearchDatasets, '/search/datasets')
-api.add_resource(SearchSamples, '/search/samples')
+api.add_resource(DatasetSearch, '/search')
 
 # Get available values
 api.add_resource(ValuesDatasets, '/values/datasets/<key>')

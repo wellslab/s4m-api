@@ -73,6 +73,50 @@ class DatasetPca(Resource):
         return {'coordinates': ds.pcaCoordinates().to_dict(orient=args.get('orient')), 
                 'attributes': ds.pcaAttributes().to_dict(orient=args.get('orient'))}
 
+class DatasetSearch(Resource):
+    def get(self):
+        """Return matching dataset + sample info based on query.
+        """
+        parser = reqparse.RequestParser()
+        parser.add_argument('dataset_id', type=str, required=False, action='append') # list of dataset ids
+        parser.add_argument('query_string', type=str, required=False)
+        parser.add_argument('platform_type', type=str, required=False)
+        parser.add_argument('projects', type=str, required=False)
+        parser.add_argument('format', type=str, required=False)
+        parser.add_argument('limit', type=int, required=False)
+        args = parser.parse_args()
+
+        df = datasets.datasetMetadataFromQuery(dataset_id=args.get("dataset_id"),
+                                               query_string=args.get("query_string"),
+                                               platform_type=args.get("platform_type"),
+                                               projects=args.get("projects"),
+                                               limit=args.get("limit"))
+        samples = datasets.samplesFromDatasetIds(df.index.tolist())
+
+        if args.get('format')=='sunburst1':  # Returns sunburst plot data, rather than dataset + samples data
+            df = datasets.sunburstData(samples)
+            return df.reset_index().to_dict(orient='list')
+        elif args.get('format')=='sunburst2':  # Returns sunburst plot data, rather than dataset + samples data
+            df = datasets.sunburstData(samples, parentKey='tissue_of_origin', childKey='cell_type')
+            return df.reset_index().to_dict(orient='list')
+        
+        # Add sample related columns
+        samples = samples.fillna('')
+        df['samples'] = [len(samples[samples['dataset_id']==index]) for index in df.index]
+        df['cell_type'] = [','.join(samples[samples['dataset_id']==index]['cell_type'].unique().tolist()) for index in df.index]
+
+        # Add some derived columns for convenience
+        displayNames, pubmedIds = [], []
+        for name in df["name"]:
+            items = name.split("_")
+            displayNames.append("{} ({})".format(items[0],items[1]))
+            pubmedIds.append(items[2])
+        df["display_name"] = displayNames
+        df["pubmed_id"] = pubmedIds
+        
+        return df.fillna("").reset_index().to_dict(orient="records")
+
+
 class ValuesDatasets(Resource):
     def get(self, key):
         """Return all values for a key (=field) in the datasets collection.
