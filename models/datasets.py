@@ -252,7 +252,16 @@ def test_samples():
     assert df.at["6003_GSM396481", "cell_type"] == "hESC-derived monocyte"
 
 def test_datasetMetadataFromQuery():
-    print(datasetMetadataFromQuery(limit=2))
+    """Compare times for bulk query in mongo vs constructing a data frame after individual queries
+    (457, 12) 0.012085914611816406
+    (457, 13) 0.2130753993988037
+    """
+    import time
+    t0 = time.time()
+    df = datasetMetadataFromQuery(limit=500)
+    print(df.shape, time.time()-t0)
+    t1 = time.time()
+    print(pandas.DataFrame.from_records([Dataset(datasetId).metadata() for datasetId in df.index]).shape, time.time()-t1)
 
 def test_samplesFromQuery():
     print(samplesFromQuery(limit=5))

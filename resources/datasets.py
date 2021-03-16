@@ -1,7 +1,7 @@
 from flask_restful import reqparse, Resource
 
 from models import datasets
-from resources.errors import DatasetIdNotFoundError
+from resources.errors import DatasetIdNotFoundError, DatasetIsPrivateError
 
 class DatasetMetadata(Resource):
     def get(self, datasetId):
@@ -10,7 +10,7 @@ class DatasetMetadata(Resource):
         try:
             ds = datasets.Dataset(datasetId)
             if ds and ds.isPrivate():
-                return None
+                raise DatasetIsPrivateError
             return ds.metadata()
         except datasets.DatasetIdNotFoundError:
             raise DatasetIdNotFoundError
@@ -29,7 +29,7 @@ class DatasetSamples(Resource):
 
         ds = datasets.Dataset(datasetId)
         if ds and ds.isPrivate():
-            return None
+            return DatasetIsPrivateError
         
         # These fields are used internally by the model and not useful for API
         hideKeys = ["dataset_id"]
@@ -51,6 +51,8 @@ class DatasetExpression(Resource):
         args = parser.parse_args()
 
         ds = datasets.Dataset(datasetId)
+        if ds and ds.isPrivate():
+            return DatasetIsPrivateError
         return ds.expressionMatrix().loc[args.get('gene_id')].to_dict(orient=args.get('orient'))
 
 class DatasetGovernance(Resource):
@@ -69,7 +71,7 @@ class DatasetPca(Resource):
 
         ds = datasets.Dataset(datasetId)
         if ds and ds.isPrivate():
-            return None
+            return DatasetIsPrivateError
         return {'coordinates': ds.pcaCoordinates().to_dict(orient=args.get('orient')), 
                 'attributes': ds.pcaAttributes().to_dict(orient=args.get('orient'))}
 
