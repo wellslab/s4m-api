@@ -27,6 +27,7 @@ def datasetMetadataFromQuery(**kwargs):
     query_string = kwargs.get("query_string")
     platform_type = kwargs.get("platform_type")
     projects = kwargs.get("projects")
+    status = kwargs.get("status")
     public_only = kwargs.get("public_only", True)
 
     params = {}
@@ -43,6 +44,8 @@ def datasetMetadataFromQuery(**kwargs):
             params["projects"] = {"$in":["%s_atlas" % atlasType for atlasType in Atlas.all_atlas_types]}
         else:
             params["projects"] = {"$in":[projects]}
+    if status:
+        params["status"] = status
     if query_string:
         params['$text'] = {"$search": query_string}
 

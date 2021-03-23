@@ -9,6 +9,9 @@ class DatasetIsPrivateError(HTTPException):
 class UserNotAuthenticatedError(HTTPException):
     pass
 
+class DatasetQCFilesMissingError(HTTPException):
+    pass
+
 errors = {
     "DatasetIdNotFoundError": {
         "message": "Dataset id not found in the system.",
@@ -20,6 +23,10 @@ errors = {
     },
     "UserNotAuthenticatedError": {
         "message": "User authentication failed.",
+        "status": 400
+    },
+    "DatasetQCFilesMissingError": {
+        "message": "QC files are missing for this dataset.",
         "status": 400
     }
 }

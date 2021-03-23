@@ -13,7 +13,7 @@ from resources.errors import errors
 
 app = Flask(__name__)
 api = Api(app, errors=errors)
-cors = CORS(app)
+#cors = CORS(app)
 
 logging.basicConfig(filename='app.log', level=logging.ERROR, format=f'%(asctime)s %(levelname)s %(name)s : %(message)s')
 
@@ -43,7 +43,9 @@ api.add_resource(auth.AuthUser, '/auth/user')
 
 # Dataset governance pages (require authentication)
 api.add_resource(governance.DatasetSummary, '/governance/summary')
-api.add_resource(governance.DatasetReport, '/governance/report/<int:datasetId>')
+api.add_resource(governance.DatasetReport, '/governance/<int:datasetId>/report')
+api.add_resource(governance.DatasetQCHtml, '/governance/<int:datasetId>/qchtml')
+api.add_resource(governance.DatasetQCPCA, '/governance/<int:datasetId>/qcpca')
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
