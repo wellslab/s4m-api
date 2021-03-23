@@ -1,6 +1,10 @@
 """
 Main interface to stemformatics data. Dataset class defined here handles most interactions with underlying
 data, including sample tables and expression matrix files. Atlas data are handled separately in the atlas.py.
+
+Note that model here does not enforce rules on private and public datasets, hence it's up to the controller
+to ensure that correct parameter is used to call the functions here, if trying to ensure only public datasets
+are returned, for example.
 """
 import pymongo, os, pandas
 from models.utilities import mongoClient
@@ -23,10 +27,13 @@ def datasetMetadataFromQuery(**kwargs):
     query_string = kwargs.get("query_string")
     platform_type = kwargs.get("platform_type")
     projects = kwargs.get("projects")
+    public_only = kwargs.get("public_only", True)
 
-    params = {"private": False} # return only public datasets currently
+    params = {}
     attributes = {"dataset_id":1, "_id":0} if kwargs.get("idsOnly")==True else {"_id":0}
 
+    if public_only:
+        params['private'] = False
     if dataset_id:
         params['dataset_id'] = {"$in": [int(item) for item in dataset_id]}
     if platform_type:
@@ -51,24 +58,19 @@ def datasetMetadataFromQuery(**kwargs):
 
 def samplesFromDatasetIds(datasetIds):
     """Return DataFrame of samples which belong to datasets with datasetIds.
-    Assumes that datasetIds only contain public datasets.
     """
     params = {"dataset_id": {"$in": datasetIds}}
     cursor = database["samples"].find(params, {"_id":0})
     return pandas.DataFrame(cursor).set_index("sample_id") if cursor.count()!=0 else pandas.DataFrame()
 
-def allValues(collection, key, includeCount=False):
+def allValues(collection, key, includeCount=False, public_only=True):
     """Return a set of all the values for a key in a collection.
     Eg: allValues("samples", "sex") returns {'', 'female', 'male'}
     If includeCount is True, returns a pandas Series that includes count of each value
     """
-    # Only returning datasets/samples which belong to public datasets currently
-    if collection=="datasets":
-        params = {"private": False}
-    elif collection=="samples":
-        params = {"dataset_id": {"$in": datasetMetadataFromQuery(idsOnly=True)}}
-    else: # unknown collection
-        return set.Set()
+    params = {}
+    if public_only:
+        params = {"dataset_id": {"$in": datasetMetadataFromQuery(idsOnly=True, public_only=True)}}
 
     cursor = database[collection].find(params, {key:1, "_id":0})
     values = ["" if pandas.isnull(item[key]) else item[key] for item in cursor]
@@ -162,8 +164,6 @@ class Dataset(object):
         """Initialise a dataset with Id. Note that id is an integer, and will be coherced into one.
         """
         self.datasetId = int(datasetId)
-        self._samples = None
-        self._expressionMatrix = {}
 
         # Make a query to database for dataset metadata now, so if we try to create an instance with 
         # no matching dataset id, we can throw an exception
@@ -193,22 +193,24 @@ class Dataset(object):
         """
         Return samples in the dataset as a pandas DataFrame object.
         """
-        if self._samples is None:   # make a query, construct the DataFrame and cache it
-            cursor = database["samples"].find({"dataset_id": self.datasetId}, {"_id":0})
-            self._samples = pandas.DataFrame(cursor).set_index("sample_id") if cursor.count()!=0 else pandas.DataFrame()
-
-        return self._samples
+        cursor = database["samples"].find({"dataset_id": self.datasetId}, {"_id":0})
+        return pandas.DataFrame(cursor).set_index("sample_id") if cursor.count()!=0 else pandas.DataFrame()
 
     # expression matrix -------------------------------------
     def expressionMatrix(self, key="raw"):
         """Return expression matrix for this dataset as a pandas DataFrame.
-        key is one of ["raw","gene"]
+        key is one of ["raw","gene"] for microarray and ["raw","cpm"] for rna-seq.
         """
-        if key not in self._expressionMatrix:
-            self._expressionMatrix[key] = pandas.read_csv(self.expressionFilePath(key=key), sep="\t", index_col=0)
-            # Until we fix columns of expression matrix to match sample_id from database, we need to prefix dataset id
-            self._expressionMatrix[key].columns = ["%s_%s" % (self.datasetId, col) for col in self._expressionMatrix[key].columns]
-        return self._expressionMatrix[key]
+        if self.metadata()['platform_type']=='RNASeq' and key=='cpm': # get raw and calculate cpm
+            df = pandas.read_csv(self.expressionFilePath(key='raw'), sep="\t", index_col=0)
+            df = (df * 1000000).div(df.sum(axis = 0), axis = 1)    # counts per million
+        else:
+            df = pandas.read_csv(self.expressionFilePath(key=key), sep="\t", index_col=0)
+
+        # Until we fix columns of expression matrix to match sample_id from database, we need to prefix dataset id
+        df.columns = ["%s_%s" % (self.datasetId, col) for col in df.columns]
+
+        return df
 
     def expressionFilePath(self, key="raw"):
         """Return the full path to the expression file.

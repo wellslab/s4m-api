@@ -1,7 +1,8 @@
 from flask_restful import reqparse, Resource
 
+from resources import auth
 from models import datasets
-from resources.errors import DatasetIdNotFoundError, DatasetIsPrivateError
+from resources.errors import DatasetIdNotFoundError, DatasetIsPrivateError, UserNotAuthenticatedError
 
 class DatasetMetadata(Resource):
     def get(self, datasetId):
@@ -9,7 +10,7 @@ class DatasetMetadata(Resource):
         """
         try:
             ds = datasets.Dataset(datasetId)
-            if ds and ds.isPrivate():
+            if ds.isPrivate() and not auth.AuthUser().username():
                 raise DatasetIsPrivateError
             return ds.metadata()
         except datasets.DatasetIdNotFoundError:
@@ -27,9 +28,12 @@ class DatasetSamples(Resource):
         parser.add_argument('na', type=str, required=False, default="")
         args = parser.parse_args()
 
-        ds = datasets.Dataset(datasetId)
-        if ds and ds.isPrivate():
-            return DatasetIsPrivateError
+        try:
+            ds = datasets.Dataset(datasetId)
+            if ds.isPrivate() and not auth.AuthUser().username():
+                raise DatasetIsPrivateError
+        except datasets.DatasetIdNotFoundError:
+            raise DatasetIdNotFoundError
         
         # These fields are used internally by the model and not useful for API
         hideKeys = ["dataset_id"]
@@ -50,16 +54,14 @@ class DatasetExpression(Resource):
         parser.add_argument('orient', type=str, required=False, default="records")
         args = parser.parse_args()
 
-        ds = datasets.Dataset(datasetId)
-        if ds and ds.isPrivate():
-            return DatasetIsPrivateError
-        return ds.expressionMatrix().loc[args.get('gene_id')].to_dict(orient=args.get('orient'))
+        try:
+            ds = datasets.Dataset(datasetId)
+            if ds.isPrivate() and not auth.AuthUser().username():
+                raise DatasetIsPrivateError
+        except datasets.DatasetIdNotFoundError:
+            raise DatasetIdNotFoundError
 
-class DatasetGovernance(Resource):
-    def get(self, datasetId):
-        """Return governmence data for a dataset with datasetId.
-        """
-        return {}
+        return ds.expressionMatrix().loc[args.get('gene_id')].to_dict(orient=args.get('orient'))
 
 class DatasetPca(Resource):
     def get(self, datasetId):
@@ -69,9 +71,13 @@ class DatasetPca(Resource):
         parser.add_argument('orient', type=str, required=False, default="records")
         args = parser.parse_args()
 
-        ds = datasets.Dataset(datasetId)
-        if ds and ds.isPrivate():
-            return DatasetIsPrivateError
+        try:
+            ds = datasets.Dataset(datasetId)
+            if ds.isPrivate() and not auth.AuthUser().username():
+                raise DatasetIsPrivateError
+        except datasets.DatasetIdNotFoundError:
+            raise DatasetIdNotFoundError
+
         return {'coordinates': ds.pcaCoordinates().to_dict(orient=args.get('orient')), 
                 'attributes': ds.pcaAttributes().to_dict(orient=args.get('orient'))}
 
@@ -92,13 +98,14 @@ class DatasetSearch(Resource):
                                                query_string=args.get("query_string"),
                                                platform_type=args.get("platform_type"),
                                                projects=args.get("projects"),
-                                               limit=args.get("limit"))
+                                               limit=args.get("limit"),
+                                               public_only=True)
         samples = datasets.samplesFromDatasetIds(df.index.tolist())
 
         if args.get('format')=='sunburst1':  # Returns sunburst plot data, rather than dataset + samples data
             df = datasets.sunburstData(samples)
             return df.reset_index().to_dict(orient='list')
-        elif args.get('format')=='sunburst2':  # Returns sunburst plot data, rather than dataset + samples data
+        elif args.get('format')=='sunburst2': 
             df = datasets.sunburstData(samples, parentKey='tissue_of_origin', childKey='cell_type')
             return df.reset_index().to_dict(orient='list')
         
@@ -127,10 +134,11 @@ class ValuesDatasets(Resource):
         parser.add_argument('include_count', type=bool, required=False, default=False)
         args = parser.parse_args()
 
+        publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
         if args.get('include_count'):
-            return datasets.allValues("datasets", key, includeCount=True).to_dict()
+            return datasets.allValues("datasets", key, includeCount=True, public_only=publicOnly).to_dict()
         else:
-            return sorted(datasets.allValues("datasets", key))
+            return sorted(datasets.allValues("datasets", key, public_only=publicOnly))
 
 class ValuesSamples(Resource):
     def get(self, key):
@@ -140,7 +148,9 @@ class ValuesSamples(Resource):
         parser.add_argument('include_count', type=bool, required=False, default=False)
         args = parser.parse_args()
 
+        publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
         if args.get('include_count'):
-            return datasets.allValues("samples", key, includeCount=True).to_dict()
+            return datasets.allValues("samples", key, includeCount=True, public_only=publicOnly).to_dict()
         else:
-            return sorted(datasets.allValues("samples", key))
+            return sorted(datasets.allValues("samples", key, public_only=publicOnly))
+

@@ -6,6 +6,9 @@ class DatasetIdNotFoundError(HTTPException):
 class DatasetIsPrivateError(HTTPException):
     pass
 
+class UserNotAuthenticatedError(HTTPException):
+    pass
+
 errors = {
     "DatasetIdNotFoundError": {
         "message": "Dataset id not found in the system.",
@@ -13,6 +16,10 @@ errors = {
     },
     "DatasetIsPrivateError": {
         "message": "Dataset is private and cannot be accessed without authentication.",
+        "status": 400
+    },
+    "UserNotAuthenticatedError": {
+        "message": "User authentication failed.",
         "status": 400
     }
 }
