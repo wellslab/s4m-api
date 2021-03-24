@@ -67,11 +67,11 @@ class DatasetQCPCA(Governance):
         # Read pca coordinates file and return it along with samples table
         dfd = self.directoryFromDataset()        
         if dfd.get(datasetId):
-            pca = pandas.read_csv(os.path.join(dfd[datasetId],'%s.pcas/pca.tsv' % datasetId), sep='\t', index_col=0)
-            return {'pca':pca}
+            pca = pandas.read_csv(os.path.join(dfd[datasetId],'pcas/%s.pca.tsv' % datasetId), sep='\t', index_col=0)
+            pca.index.name = 'sampleId'
+            return {'pca':pca.to_dict(orient='dict')}
         else:
             raise DatasetQCFilesMissingError
-
 
 
 def test_tokens():

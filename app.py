@@ -44,8 +44,8 @@ api.add_resource(auth.AuthUser, '/auth/user')
 # Dataset governance pages (require authentication)
 api.add_resource(governance.DatasetSummary, '/governance/summary')
 api.add_resource(governance.DatasetReport, '/governance/<int:datasetId>/report')
-api.add_resource(governance.DatasetQCHtml, '/governance/<int:datasetId>/qchtml')
-api.add_resource(governance.DatasetQCPCA, '/governance/<int:datasetId>/qcpca')
+api.add_resource(governance.DatasetQCHtml, '/governance/<int:datasetId>/html')
+api.add_resource(governance.DatasetQCPCA, '/governance/<int:datasetId>/pca')
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
