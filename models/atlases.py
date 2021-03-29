@@ -11,6 +11,11 @@ print(atlas.pcaCoordinates().head())
 """
 import os, pandas, json
 
+def rankTransform(df):
+    """Return a rank transformed version of data frame
+    """
+    return (df.shape[0] - df.rank(axis=0, ascending=False, na_option='bottom')+1)/df.shape[0]
+
 class Atlas(object):
 
     # Full list of current atlas types
@@ -34,16 +39,17 @@ class Atlas(object):
         return df
 
     def expressionFilePath(self, filtered=False):
+        """Return the full file path to the expression matrix file on disk.
+        """
         filename = "expression.filtered.tsv" if filtered else "expression.tsv"
         return os.path.join(self.atlasFilePath, filename)
 
-    def expressionValues(self, geneIds, filtered=False):
-        """Return expression values for geneIds as a pandas DataFrame. 
+    def expressionMatrix(self, filtered=False):
+        """Return a pandas DataFrame of expression matrix after reading from file.
         If filtered=False, this is the "full" expression matrix that includes all genes. 
         The expression values are from rank normalised values.
         """
-        df = pandas.read_csv(self.expressionFilePath(filtered=filtered), sep="\t", index_col=0)
-        return df.loc[geneIds]
+        return pandas.read_csv(self.expressionFilePath(filtered=filtered), sep="\t", index_col=0)
 
     def datasetIds(self):
         """Return all dataset ids in this atlas as a list. Note that each element will be integer type.
@@ -68,6 +74,7 @@ class Atlas(object):
     def coloursAndOrdering(self):
         """Return dictionaries of colours and ordering of sample type items based on "colours.tsv" file inside the
         atlas file directory. Return empty dictionaries if such a file doesn't exist.
+        Note that it's possible for colours and ordering to not exist for certain sample columns.
         """
         filepath = os.path.join(self.atlasFilePath, "colours.tsv")
         return json.loads(open(filepath).read()) if os.path.exists(filepath) else {}
@@ -94,7 +101,7 @@ class Atlas(object):
             result["error"] = "Data to project appears to have 0 rows. Check format of the file."
 
         # Read expression matrix - we only need filtered version. 
-        df = self.expressionTable(filtered=True)
+        df = self.expressionMatrix(filtered=True)
         genes = self.geneInfo()
 
         commonGenes = testData.index.intersection(df.index)  # common index between test and atlas
@@ -118,7 +125,7 @@ class Atlas(object):
         coords = pandas.DataFrame(pca.fit_transform(df.values.T), index=df.columns)  # can also just run fit
         
         # make projection
-        result["coords"] = pandas.DataFrame(pca.transform(dfTest.values.T)[:,:3], index=dfTest.columns, columns=['x','y','z'])
+        result["coords"] = pandas.DataFrame(pca.transform(dfTest.values.T)[:,:3], index=dfTest.columns)
 
         if includeCombinedCoords:   # also return row concatenated data frame of atlas+projection.
             projectedCoords = result['coords']
@@ -132,6 +139,6 @@ class Atlas(object):
 # ----------------------------------------------------------
 # tests: eg. $nosetests -s <filename>:ClassName.func_name
 # ----------------------------------------------------------
-def test_samples():
-    atlas = Atlas("myeloid")
-    print(atlas.pcaCoordinates().head())
+def test_coloursAndOrdering():
+    atlas = Atlas("dc")
+    print(atlas.coloursAndOrdering())

@@ -20,18 +20,22 @@ def datasetMetadataFromQuery(**kwargs):
     """Return DataFrame of dataset metadata which match a query. Rows will have dataset ids,
     while columns will be attributes of dataset metadata. Use this instead of Dataset instance
     for fetching large numbers of datasets.
-    If idsOnly=True, only a list of dataset ids will be returned, instead of a DataFrame.
+    If ids_only=True, only a list of dataset ids will be returned, instead of a DataFrame.
     """
     limit = kwargs.get("limit")
+    ids_only = kwargs.get('ids_only', False)
+    public_only = kwargs.get("public_only", True)
+
     dataset_id = kwargs.get("dataset_id")
+    name = kwargs.get("name")
+
     query_string = kwargs.get("query_string")
     platform_type = kwargs.get("platform_type")
     projects = kwargs.get("projects")
     status = kwargs.get("status")
-    public_only = kwargs.get("public_only", True)
 
     params = {}
-    attributes = {"dataset_id":1, "_id":0} if kwargs.get("idsOnly")==True else {"_id":0}
+    attributes = {"dataset_id":1, "_id":0} if ids_only==True else {"_id":0}
 
     if public_only:
         params['private'] = False
@@ -46,6 +50,8 @@ def datasetMetadataFromQuery(**kwargs):
             params["projects"] = {"$in":[projects]}
     if status:
         params["status"] = status
+    if name:
+        params["name"] = name
     if query_string:
         params['$text'] = {"$search": query_string}
 
@@ -54,7 +60,7 @@ def datasetMetadataFromQuery(**kwargs):
     else:
         cursor = database["datasets"].find(params, attributes)
     
-    if kwargs.get("idsOnly")==True:
+    if ids_only:
         return [item["dataset_id"] for item in cursor]
     else:
         return pandas.DataFrame(cursor).set_index("dataset_id") if cursor.count()!=0 else pandas.DataFrame()
@@ -73,7 +79,7 @@ def allValues(collection, key, includeCount=False, public_only=True):
     """
     params = {}
     if public_only:
-        params = {"dataset_id": {"$in": datasetMetadataFromQuery(idsOnly=True, public_only=True)}}
+        params = {"dataset_id": {"$in": datasetMetadataFromQuery(ids_only=True, public_only=True)}}
 
     cursor = database[collection].find(params, {key:1, "_id":0})
     values = ["" if pandas.isnull(item[key]) else item[key] for item in cursor]
@@ -211,7 +217,8 @@ class Dataset(object):
             df = pandas.read_csv(self.expressionFilePath(key=key), sep="\t", index_col=0)
 
         # Until we fix columns of expression matrix to match sample_id from database, we need to prefix dataset id
-        df.columns = ["%s_%s" % (self.datasetId, col) for col in df.columns]
+        # and remove .CEL suffixes
+        df.columns = ["%s_%s" % (self.datasetId, col.replace(".CEL","")) for col in df.columns]
 
         return df
 

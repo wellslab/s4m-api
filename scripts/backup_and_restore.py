@@ -16,8 +16,8 @@ def backupCollectionToCSV(database, collection, filepath):
     """Make a backup of a collection in database to a tsv file at filepath. Example:
     backupCollectionToSCV("dataportal", "samples", "samples_20210102.tsv")
     """
-    collection = utilities.mongoClient()[database][collection]
-    df = pandas.DataFrame(collection.find({},{"_id":0}))
+    coll = utilities.mongoClient()[database][collection]
+    df = pandas.DataFrame(coll.find({},{"_id":0}))
     df.to_csv(filepath, sep="\t", index=False)
 
 def createCollectionFromCSV(database, collection, filepath):
@@ -25,15 +25,21 @@ def createCollectionFromCSV(database, collection, filepath):
     createCollectionFromCSV("dataportal", "samples", "samples_20210102.tsv").
     If collection already exists, you'll have to confirm that you want to delete all records in it first.
     """
-    collection = utilities.mongoClient()[database][collection]
+    coll = utilities.mongoClient()[database][collection]
     df = pandas.read_csv(filepath, sep="\t")
 
-    if collection.count_documents({})>0:
+    # For any column which is a list, parse it, otherwise it will go into mongo as a string
+    import ast
+    listColumns = ['projects']
+    for column in listColumns:
+        df[column] = [ast.literal_eval(item) for item in df[column]]
+
+    if coll.count_documents({})>0:
         confirm = input("This collection contains documents. Are you sure you want to delete all before inserting new documents? (y/[n])\n")
         if confirm!="y": return
 
-    collection.drop()
-    collection.insert_many(df.to_dict("records"))
+    coll.drop()
+    coll.insert_many(df.to_dict("records"))
     createTextIndex(database, collection)
 
 def createTextIndex(database, collection):
@@ -44,8 +50,8 @@ def createTextIndex(database, collection):
     elif collection=='samples':
         index_cols = [item for item in datasets.Dataset.sample_fields if item not in ['sample_id']]
 
-    collection = utilities.mongoClient()[database][collection]
-    collection.create_index([(item,'text') for item in index_cols])
+    coll = utilities.mongoClient()[database][collection]
+    coll.create_index([(item,'text') for item in index_cols])
 
 
 if __name__=="__main__":

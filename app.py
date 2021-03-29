@@ -1,7 +1,7 @@
 from flask import Flask
 from flask_restful import Api
 from flask_cors import CORS
-import logging
+import os, logging
 
 # Load environment vars in .env file. Even though load_dotenv function call is not even necessary
 # when the app is called directly by python app.py, it is necessary for nohup.
@@ -15,7 +15,8 @@ app = Flask(__name__)
 api = Api(app, errors=errors)
 #cors = CORS(app)
 
-logging.basicConfig(filename='app.log', level=logging.ERROR, format=f'%(asctime)s %(levelname)s %(name)s : %(message)s')
+if os.getenv('FLASK_ENV')!='development':
+    logging.basicConfig(filename='app.log', level=logging.ERROR, format=f'%(asctime)s %(levelname)s %(name)s : %(message)s')
 
 # Get tables for a dataset with id
 api.add_resource(datasets.DatasetMetadata, '/datasets/<int:datasetId>/metadata')
@@ -32,6 +33,7 @@ api.add_resource(datasets.ValuesSamples, '/values/samples/<key>')
 
 # Atlas data
 api.add_resource(atlases.Atlas, '/atlases/<atlasType>/<item>')
+api.add_resource(atlases.AtlasProjection, '/atlas-projection/<atlasType>/<dataSource>')
 
 # Gene annotation data
 api.add_resource(genes.Geneset, '/genes')

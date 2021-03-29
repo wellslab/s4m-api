@@ -84,22 +84,27 @@ class DatasetPca(Resource):
 class DatasetSearch(Resource):
     def get(self):
         """Return matching dataset + sample info based on query.
+        Note that in the current implementation, if none of the parameters have been specified or other parameters
+        not recognised here have been specified, this will fetch data for all datasets.
         """
         parser = reqparse.RequestParser()
         parser.add_argument('dataset_id', type=str, required=False, action='append') # list of dataset ids
         parser.add_argument('query_string', type=str, required=False)
         parser.add_argument('platform_type', type=str, required=False)
         parser.add_argument('projects', type=str, required=False)
-        parser.add_argument('format', type=str, required=False)
+        parser.add_argument('name', type=str, required=False)
+        parser.add_argument('format', type=str, required=False)  # ['sunburst1','sunburst2']
         parser.add_argument('limit', type=int, required=False)
         args = parser.parse_args()
 
+        publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
         df = datasets.datasetMetadataFromQuery(dataset_id=args.get("dataset_id"),
+                                               name=args.get("name"),
                                                query_string=args.get("query_string"),
                                                platform_type=args.get("platform_type"),
                                                projects=args.get("projects"),
                                                limit=args.get("limit"),
-                                               public_only=True)
+                                               public_only=publicOnly)
         samples = datasets.samplesFromDatasetIds(df.index.tolist())
 
         if args.get('format')=='sunburst1':  # Returns sunburst plot data, rather than dataset + samples data

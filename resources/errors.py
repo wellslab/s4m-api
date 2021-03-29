@@ -12,6 +12,9 @@ class UserNotAuthenticatedError(HTTPException):
 class DatasetQCFilesMissingError(HTTPException):
     pass
 
+class DatasetProjectionFailedError(HTTPException):
+    pass
+
 errors = {
     "DatasetIdNotFoundError": {
         "message": "Dataset id not found in the system.",
@@ -28,5 +31,9 @@ errors = {
     "DatasetQCFilesMissingError": {
         "message": "QC files are missing for this dataset.",
         "status": 400
+    },
+    "DatasetProjectionFailedError": {
+        "message": "Projection of dataset failed. Check file formats.",
+        "stauts": 400
     }
 }
