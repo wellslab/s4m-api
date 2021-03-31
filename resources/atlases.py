@@ -72,7 +72,13 @@ class AtlasProjection(Resource):
             else:
                 name = args.get('test_name')
                 df = pandas.read_csv(args.get('test_expression'), sep='\t', index_col=0)
-                samples = pandas.read_csv(args.get('test_samples'), sep='\t', index_col=0).loc[df.columns]
+                samples = pandas.read_csv(args.get('test_samples'), sep='\t', index_col=0)
+                # Some validation on user supplied data
+                if len(df)==0:
+                    return {'error': 'The expression matrix came back as zero length. Check its format.'}
+                elif len(samples)==0:
+                    return {'error': 'The sample table came back as zero length. Check its format and ensure its row index match columns of expression matrix.'}
+                samples = samples.loc[df.columns]
                 column = args.get('test_sample_column')
                 if column not in samples.columns: column = samples.columns[0]
                 
@@ -92,7 +98,6 @@ class AtlasProjection(Resource):
             if "combinedCoords" in result:
                 result["combinedCoords"] = result["combinedCoords"].to_dict(orient="split")
             return result
-        except Exception as e:
-            raise e
-        # except:
-        #     raise errors.DatasetProjectionFailedError
+            
+        except:
+            raise errors.DatasetProjectionFailedError

@@ -21,6 +21,8 @@ def datasetMetadataFromQuery(**kwargs):
     while columns will be attributes of dataset metadata. Use this instead of Dataset instance
     for fetching large numbers of datasets.
     If ids_only=True, only a list of dataset ids will be returned, instead of a DataFrame.
+    Note that currently query_string is searching only in datasets collection, rather than including samples.
+    This should be changed in future once samples is better annotated.
     """
     limit = kwargs.get("limit")
     ids_only = kwargs.get('ids_only', False)

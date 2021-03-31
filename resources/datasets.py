@@ -130,6 +130,37 @@ class DatasetSearch(Resource):
         
         return df.fillna("").reset_index().to_dict(orient="records")
 
+class SampleSearch(Resource):
+    def get(self):
+        """Return matching sample info based on query.
+        Note that in the current implementation, if none of the parameters have been specified or other parameters
+        not recognised here have been specified, this will fetch data for all samples but a limit of 50 is imposed.
+        """
+        parser = reqparse.RequestParser()
+        parser.add_argument('dataset_id', type=str, required=False, action='append') # list of dataset ids
+        parser.add_argument('query_string', type=str, required=False)
+        parser.add_argument('field', type=str, required=False, action='append')  # list of fields to include
+        parser.add_argument('limit', type=int, required=False, default=50)
+        parser.add_argument('orient', type=str, required=False, default='records')
+        args = parser.parse_args()
+
+        publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
+        df = datasets.datasetMetadataFromQuery(dataset_id=args.get("dataset_id"),
+                                               query_string=args.get("query_string"),
+                                               limit=args.get("limit"),
+                                               public_only=publicOnly)
+        samples = datasets.samplesFromDatasetIds(df.index.tolist())
+
+        # subset columns of samples if specified
+        fieldsToReturn = [item for item in args.get('field') if item in samples.columns]
+        if len(fieldsToReturn)>0:
+            samples = samples[fieldsToReturn]
+
+        if args.get('orient')=='records':  # include index
+            samples = sample.reset_index()
+
+        return samples.fillna("").to_dict(orient=args.get('orient'))
+
 
 class ValuesDatasets(Resource):
     def get(self, key):

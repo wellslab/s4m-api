@@ -24,8 +24,9 @@ api.add_resource(datasets.DatasetSamples, '/datasets/<int:datasetId>/samples')
 api.add_resource(datasets.DatasetExpression, '/datasets/<int:datasetId>/expression')
 api.add_resource(datasets.DatasetPca, '/datasets/<int:datasetId>/pca')
 
-# Perform search
-api.add_resource(datasets.DatasetSearch, '/search')
+# Dataset and sample search
+api.add_resource(datasets.DatasetSearch, '/search/datasets')
+api.add_resource(datasets.SampleSearch, '/search/samples')
 
 # Get available values
 api.add_resource(datasets.ValuesDatasets, '/values/datasets/<key>')
