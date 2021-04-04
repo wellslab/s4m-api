@@ -30,9 +30,10 @@ def createCollectionFromCSV(database, collection, filepath):
 
     # For any column which is a list, parse it, otherwise it will go into mongo as a string
     import ast
-    listColumns = ['projects']
+    listColumns = ['projects']  # all columns where list is expected
     for column in listColumns:
-        df[column] = [ast.literal_eval(item) for item in df[column]]
+        if column in df.columns:
+            df[column] = [ast.literal_eval(item) for item in df[column]]
 
     if coll.count_documents({})>0:
         confirm = input("This collection contains documents. Are you sure you want to delete all before inserting new documents? (y/[n])\n")

@@ -97,6 +97,7 @@ class AtlasProjection(Resource):
             result["column"] = column
             if "combinedCoords" in result:
                 result["combinedCoords"] = result["combinedCoords"].to_dict(orient="split")
+                
             return result
             
         except:

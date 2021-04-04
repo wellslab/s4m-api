@@ -1,7 +1,7 @@
 """
 Examples of how to run this script (ensure you're in the application directory):
-(Requires environment variable EXPRESSION_FILEPATH, which points to where the expression files are)
-(s4m-api) [ec2-user@api-dev s4m-api]$ python -m scripts.check_data_consistency checkMissingData
+(Requires environment variables EXPRESSION_FILEPATH and ATLAS_FILEPATH, which point to where the expression and atlas files are)
+(s4m-api) [ec2-user@api-dev s4m-api]$ python -m scripts.check_data_consistency -a
 
 """
 
