@@ -10,7 +10,7 @@ import os, sys, pandas, re, argparse
 sys.path.append(os.path.join(sys.path[0]))
 from models import utilities, datasets, atlases
 
-def checkMissingData(publicDatasetsOnly=False, atlasDatasetsOnly=False):
+def checkMissingData(publicDatasetsOnly=False, atlasDatasetsOnly=False, checkSampleIds=False):
     """Function to check for inconsistencies, where dataset metadata may have datasets with no corresponding
     sample table, for example.
     """
@@ -48,26 +48,21 @@ def checkMissingData(publicDatasetsOnly=False, atlasDatasetsOnly=False):
     print("Dataset ids from metadata missing from expression", len(diff2), sorted(diff2))
     print("Dataset ids from atlas files missing from metadata", len(diff3), sorted(diff3))
 
-    return
-    diff1 = datasetIdsFromSamples.difference(datasetIdsFromMetadata)
-    diff2 = datasetIdsFromSamples.difference(datasetIdsFromExpression)
-    print("\nDataset ids from samples missing from metadata", len(diff1), list(diff1)[:3])
-    print("Dataset ids from samples missing from expression", len(diff2), list(diff2)[:3])
+    if checkSampleIds:    # Check for consistency between sample ids - this takes longer since we need to open each expression file
+        print("\n")
+        for datasetId in sorted(datasetIdsFromMetadata):
+            ds = datasets.Dataset(datasetId)
+            sampleIdsFromMetadata = set(ds.samples().index)
+            sampleIdsFromExpression = set(ds.expressionMatrix().columns)
+            if sampleIdsFromMetadata!=sampleIdsFromExpression:
+                print("Non-matching sample ids for dataset %s" % (datasetId))
 
-    diff1 = datasetIdsFromExpression.difference(datasetIdsFromMetadata)
-    diff2 = datasetIdsFromExpression.difference(datasetIdsFromSamples)
-    print("\nDataset ids from expression missing from metadata", len(diff1), list(diff1)[:3])
-    print("Dataset ids from expression missing from samples", len(diff2), list(diff2)[:3])
-
-def checkMismatchedSampleIds():
-    """Some datasets have different sample ids in the expression file compared to samples table.
-    """
-    return
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", help="only look at public datasets", action="store_true")
     parser.add_argument("-a", help="only look at atlas datasets", action="store_true")
+    parser.add_argument("-s", help="check sample ids too", action="store_true")
     args = parser.parse_args()
     
-    checkMissingData(publicDatasetsOnly=args.p, atlasDatasetsOnly=args.a)
+    checkMissingData(publicDatasetsOnly=args.p, atlasDatasetsOnly=args.a, checkSampleIds=args.s)

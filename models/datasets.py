@@ -220,7 +220,7 @@ class Dataset(object):
 
         # Until we fix columns of expression matrix to match sample_id from database, we need to prefix dataset id
         # and remove .CEL suffixes
-        df.columns = ["%s_%s" % (self.datasetId, col.replace(".CEL","")) for col in df.columns]
+        #df.columns = ["%s_%s" % (self.datasetId, col.replace(".CEL","")) for col in df.columns]
 
         return df
 

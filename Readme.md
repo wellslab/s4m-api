@@ -10,6 +10,15 @@ Authentication including token generation
 https://scotch.io/tutorials/build-a-restful-api-with-flask-the-tdd-way-part-2
 https://realpython.com/token-based-authentication-with-flask/#jwt-setup
 
+Return a string as file in response
+```
+from flask import make_response
+
+response = make_response(df.to_json(orient=args.get('orient')))
+response.headers['content-type'] = 'application/octet-stream'
+return response
+```
+
 conda install waitress
 conda install -c conda-forge flask-restful
 conda install pymongo

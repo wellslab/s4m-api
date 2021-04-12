@@ -1,20 +1,29 @@
 from flask_restful import reqparse, Resource
+from flask import send_from_directory
+import os
 
 from resources import auth
-from models import datasets
-from resources.errors import DatasetIdNotFoundError, DatasetIsPrivateError, UserNotAuthenticatedError
+from models import datasets, genes
+from resources.errors import DatasetIdNotFoundError, DatasetIsPrivateError, DatasetGeneIdNotInExpressionError, UserNotAuthenticatedError
+
+def protectedDataset(datasetId):
+    """For many classes here where we check if a dataset is private or not before proceding, this convenience function peforms
+    the taks and returns the datasets.Dataset instance.
+    """
+    try:
+        ds = datasets.Dataset(datasetId)
+        if ds.isPrivate() and not auth.AuthUser().username():
+            raise DatasetIsPrivateError
+        return ds
+    except datasets.DatasetIdNotFoundError:
+        raise DatasetIdNotFoundError
 
 class DatasetMetadata(Resource):
     def get(self, datasetId):
         """Return dataset metadata for a dataset with datasetId.
         """
-        try:
-            ds = datasets.Dataset(datasetId)
-            if ds.isPrivate() and not auth.AuthUser().username():
-                raise DatasetIsPrivateError
-            return ds.metadata()
-        except datasets.DatasetIdNotFoundError:
-            raise DatasetIdNotFoundError
+        ds = protectedDataset(datasetId)
+        return ds.metadata()
 
 class DatasetSamples(Resource):
     def get(self, datasetId):
@@ -26,42 +35,70 @@ class DatasetSamples(Resource):
         parser = reqparse.RequestParser()
         parser.add_argument('orient', type=str, required=False, default="records")
         parser.add_argument('na', type=str, required=False, default="")
+        parser.add_argument('as_file', type=bool, required=False, default=False)
         args = parser.parse_args()
 
-        try:
-            ds = datasets.Dataset(datasetId)
-            if ds.isPrivate() and not auth.AuthUser().username():
-                raise DatasetIsPrivateError
-        except datasets.DatasetIdNotFoundError:
-            raise DatasetIdNotFoundError
+        ds = protectedDataset(datasetId)
         
         # These fields are used internally by the model and not useful for API
         hideKeys = ["dataset_id"]
         df = ds.samples()
         if len(df)>0:
             df = df.drop(hideKeys, axis=1).fillna(args.get("na"))
-            return df.reset_index().to_dict(orient=args.get("orient"))
+
+            if args.get('as_file'):
+                from tempfile import NamedTemporaryFile
+                from flask import send_file
+                with NamedTemporaryFile() as temp_file:
+                    df.to_csv(temp_file.name, sep='\t')
+                    return send_file(temp_file.name, as_attachment=True, attachment_filename="stemformatics_dataset_%s.samples.tsv" % datasetId)
+            else:
+                if args.get('orient')=='records':  # include index
+                    df = df.reset_index()
+                return df.to_dict(orient=args.get("orient")) 
         else:
             return {}
+
+# class DatasetPossibleGenes(Resource):
+#     def get(self, datasetId):
+#         """Thought it may be possible to get gene ids and symbols for genes in a dataset this way.
+#         But in practise this may return a very large list which hampers performance on the website.
+#         """
+#         ds = protectedDataset(datasetId)
+#
+#         This could work if we were bringing back all gene ids, even if not found in annotation - however it will be really slow
+#         since the number of entries returned is not subset by query string.
+#         geneIds = ds.expressionMatrix(key=key).index.tolist()
+#         gs = genes.geneset(geneIds=geneIds, limit=None)
+#         gs = gs.loc[set(geneIds).intersection(gs.index)]
+#         geneSymbolFromGeneId = gs['gene_name'].to_dict()
+#         return [{'geneId':geneId, 'geneSymbol':geneSymbolFromGeneId.get(geneId, geneId)} for geneId in geneIds]
 
 class DatasetExpression(Resource):
     def get(self, datasetId):
         """Return expression table for a dataset with datasetId and gene id(s).
         """
         parser = reqparse.RequestParser()
-        parser.add_argument('gene_id', type=str, required=False, default="", action="append")
+        parser.add_argument('gene_id', type=str, required=False, default="", action="append")  # will return a list
         parser.add_argument('key', type=str, required=False, default="raw")
         parser.add_argument('orient', type=str, required=False, default="records")
+        parser.add_argument('as_file', type=bool, required=False, default=False)
         args = parser.parse_args()
 
-        try:
-            ds = datasets.Dataset(datasetId)
-            if ds.isPrivate() and not auth.AuthUser().username():
-                raise DatasetIsPrivateError
-        except datasets.DatasetIdNotFoundError:
-            raise DatasetIdNotFoundError
+        ds = protectedDataset(datasetId)
 
-        return ds.expressionMatrix().loc[args.get('gene_id')].to_dict(orient=args.get('orient'))
+        if args.get('as_file'):
+            filepath = ds.expressionFilePath()
+            return send_from_directory(os.path.dirname(filepath), os.path.basename(filepath), as_attachment=True, 
+                attachment_filename="stemformatics_dataset_%s.%s.tsv" % (datasetId, args.get('key')))
+        else:
+            df = ds.expressionMatrix().loc[args.get('gene_id')]
+            if len(df)>0:
+                if args.get('orient')=='records':
+                    df = df.reset_index()
+                return df.to_dict(orient=args.get('orient'))
+            else:
+               raise DatasetGeneIdNotInExpressionError
 
 class DatasetPca(Resource):
     def get(self, datasetId):
@@ -71,13 +108,7 @@ class DatasetPca(Resource):
         parser.add_argument('orient', type=str, required=False, default="records")
         args = parser.parse_args()
 
-        try:
-            ds = datasets.Dataset(datasetId)
-            if ds.isPrivate() and not auth.AuthUser().username():
-                raise DatasetIsPrivateError
-        except datasets.DatasetIdNotFoundError:
-            raise DatasetIdNotFoundError
-
+        ds = protectedDataset(datasetId)
         return {'coordinates': ds.pcaCoordinates().to_dict(orient=args.get('orient')), 
                 'attributes': ds.pcaAttributes().to_dict(orient=args.get('orient'))}
 

@@ -6,13 +6,16 @@ class DatasetIdNotFoundError(HTTPException):
 class DatasetIsPrivateError(HTTPException):
     pass
 
-class UserNotAuthenticatedError(HTTPException):
+class DatasetGeneIdNotInExpressionError(HTTPException):
     pass
 
 class DatasetQCFilesMissingError(HTTPException):
     pass
 
 class DatasetProjectionFailedError(HTTPException):
+    pass
+
+class UserNotAuthenticatedError(HTTPException):
     pass
 
 errors = {
@@ -24,8 +27,8 @@ errors = {
         "message": "Dataset is private and cannot be accessed without authentication.",
         "status": 400
     },
-    "UserNotAuthenticatedError": {
-        "message": "User authentication failed.",
+    "DatasetGeneIdNotInExpressionError": {
+        "message": "Gene id was not found in the expression matrix.",
         "status": 400
     },
     "DatasetQCFilesMissingError": {
@@ -35,5 +38,9 @@ errors = {
     "DatasetProjectionFailedError": {
         "message": "Projection of dataset failed. Check file formats.",
         "stauts": 400
-    }
+    },
+    "UserNotAuthenticatedError": {
+        "message": "User authentication failed.",
+        "status": 400
+    },
 }
