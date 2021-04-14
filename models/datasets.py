@@ -218,10 +218,6 @@ class Dataset(object):
         else:
             df = pandas.read_csv(self.expressionFilePath(key=key), sep="\t", index_col=0)
 
-        # Until we fix columns of expression matrix to match sample_id from database, we need to prefix dataset id
-        # and remove .CEL suffixes
-        #df.columns = ["%s_%s" % (self.datasetId, col.replace(".CEL","")) for col in df.columns]
-
         return df
 
     def expressionFilePath(self, key="raw"):
@@ -237,9 +233,6 @@ class Dataset(object):
         """
         filepath = os.path.join(os.environ["EXPRESSION_FILEPATH"], "%s/%s.pca.tsv" % (self.datasetId, self.datasetId))
         df = pandas.read_csv(filepath, sep="\t", index_col=0) if os.path.exists(filepath) else pandas.DataFrame()
-
-        # Until we fix columns of expression matrix to match sample_id from database, we need to prefix dataset id
-        df.index = ["%s_%s" % (self.datasetId, index) for index in df.index]
 
         return df
 

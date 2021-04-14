@@ -92,7 +92,7 @@ class DatasetExpression(Resource):
             return send_from_directory(os.path.dirname(filepath), os.path.basename(filepath), as_attachment=True, 
                 attachment_filename="stemformatics_dataset_%s.%s.tsv" % (datasetId, args.get('key')))
         else:
-            df = ds.expressionMatrix().loc[args.get('gene_id')]
+            df = ds.expressionMatrix(key=args.get('key')).loc[args.get('gene_id')]
             if len(df)>0:
                 if args.get('orient')=='records':
                     df = df.reset_index()
