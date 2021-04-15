@@ -3,7 +3,8 @@ from flask import send_from_directory
 
 from models import atlases, datasets
 from resources import auth, errors
-import os, werkzeug, pandas
+
+import os, werkzeug, pandas, json
 
 class Atlas(Resource):
     def get(self, atlasType, item):
@@ -12,38 +13,53 @@ class Atlas(Resource):
         # Note that these arguments will not be case sensitive, coming from URL
         parser = reqparse.RequestParser()
         parser.add_argument('orient', type=str, required=False, default="records")
-        parser.add_argument('filtered', type=str, required=False, default=True)
+        parser.add_argument('filtered', type=bool, required=False, default=False)
         parser.add_argument('query_string', type=str, required=False, default="")
         parser.add_argument('gene_id', type=str, required=False, default="", action="append")  # list of strings
-        parser.add_argument('test_expression', type=werkzeug.datastructures.FileStorage, location='files')
+        parser.add_argument('as_file', type=bool, required=False, default=False)
         args = parser.parse_args()
 
         atlas = atlases.Atlas(atlasType)
         if item=="coordinates":
-            return atlas.pcaCoordinates().to_dict(orient=args.get("orient"))
+            df = atlas.pcaCoordinates()
+            filepath = os.path.join(atlas.atlasFilePath, "coordinates.tsv")
 
         elif item=="samples":
-            return atlas.sampleMatrix().fillna('').to_dict(orient=args.get("orient"))
+            df = atlas.sampleMatrix().fillna('')
+            filepath = os.path.join(atlas.atlasFilePath, "samples.tsv")
 
-        elif item=="expression-file":  # this is served as a file download
-            filepath = atlas.expressionFilePath(args.get('filtered'))
-            return send_from_directory(os.path.dirname(filepath), os.path.basename(filepath), as_attachment=True, 
-                attachment_filename="stemformatics_atlas_%s.%s.%s" % (atlasType, atlas.version, os.path.basename(filepath)))
+        elif item=="expression-values":  # subset expression matrix on gene ids specified
+            df = atlas.expressionMatrix(filtered=args.get('filtered')).loc[args.get("gene_id")]
         
-        elif item=="expression-values":
-            df = atlas.expressionMatrix().loc[args.get("gene_id")]
-            return df.to_dict(orient=args.get("orient"))
+        elif item=="expression-file":  # this is served as a file download regardless of as_file flag
+            filepath = atlas.expressionFilePath(filtered=args.get('filtered'))
+            args['as_file'] = True
+
+        elif item=="genes":  # also served as a file download regardless of as_file flag
+            filepath = os.path.join(atlas.atlasFilePath, "genes.tsv")
+            args['as_file'] = True
+
+        elif item=="colours-and-ordering":  # note this is actually a dictionary, not data frame, so just return it here if not serving a file
+            colours = atlas.coloursAndOrdering()
+            if not args.get('as_file'):
+                return colours
+            filepath = os.path.join(atlas.atlasFilePath, "colours.json")
         
-        elif item=="colours-and-ordering":
-            return atlas.coloursAndOrdering()
-        
-        elif item=="possible-genes":
+        elif item=="possible-genes":  # no option to return a file here - just return a dictionary
             df = atlas.geneInfo().fillna("")
             df = df[df["symbol"].str.lower().str.startswith(args.get("query_string").lower())]
             return df.sort_values(["inclusion","symbol"], ascending=[False,True]).reset_index().to_dict(orient="records")
         
         else:
             return []
+
+        if args.get('as_file'):
+            return send_from_directory(os.path.dirname(filepath), os.path.basename(filepath), as_attachment=True, 
+                attachment_filename="stemformatics_atlas_%s.%s.%s" % (atlasType, atlas.version, os.path.basename(filepath)))
+        else:
+            if args.get('orient')=='records':
+                df = df.reset_index()
+            return df.to_dict(orient=args.get("orient"))
 
 class AtlasProjection(Resource):
     def post(self, atlasType, dataSource):

@@ -72,11 +72,11 @@ class Atlas(object):
         return df
 
     def coloursAndOrdering(self):
-        """Return dictionaries of colours and ordering of sample type items based on "colours.tsv" file inside the
+        """Return dictionaries of colours and ordering of sample type items based on "colours.json" file inside the
         atlas file directory. Return empty dictionaries if such a file doesn't exist.
         Note that it's possible for colours and ordering to not exist for certain sample columns.
         """
-        filepath = os.path.join(self.atlasFilePath, "colours.tsv")
+        filepath = os.path.join(self.atlasFilePath, "colours.json")
         return json.loads(open(filepath).read()) if os.path.exists(filepath) else {}
 
     def projection(self, name, testData, includeCombinedCoords=True):
