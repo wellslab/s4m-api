@@ -145,6 +145,9 @@ class DatasetSearch(Resource):
             df = datasets.sunburstData(samples, parentKey='tissue_of_origin', childKey='cell_type')
             return df.reset_index().to_dict(orient='list')
         
+        if len(df)==0: # no matching result found
+            return []
+            
         # Add sample related columns
         samples = samples.fillna('')
         df['samples'] = [len(samples[samples['dataset_id']==index]) for index in df.index]
