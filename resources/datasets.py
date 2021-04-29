@@ -35,7 +35,8 @@ class DatasetSamples(Resource):
         parser = reqparse.RequestParser()
         parser.add_argument('orient', type=str, required=False, default="records")
         parser.add_argument('na', type=str, required=False, default="")
-        parser.add_argument('as_file', type=bool, required=False, default=False)
+        parser.add_argument('as_file', type=str, required=False, default="False")  
+            # - if set to boolean, any string is parsed as true
         args = parser.parse_args()
 
         ds = protectedDataset(datasetId)
@@ -46,7 +47,7 @@ class DatasetSamples(Resource):
         if len(df)>0:
             df = df.drop(hideKeys, axis=1).fillna(args.get("na"))
 
-            if args.get('as_file'):
+            if args.get('as_file').lower().startswith('t'):
                 from tempfile import NamedTemporaryFile
                 from flask import send_file
                 with NamedTemporaryFile() as temp_file:
@@ -82,12 +83,13 @@ class DatasetExpression(Resource):
         parser.add_argument('gene_id', type=str, required=False, default="", action="append")  # will return a list
         parser.add_argument('key', type=str, required=False, default="raw")
         parser.add_argument('orient', type=str, required=False, default="records")
-        parser.add_argument('as_file', type=bool, required=False, default=False)
+        parser.add_argument('as_file', type=str, required=False, default="False")  
+            # - if set to boolean, any string is parsed as true
         args = parser.parse_args()
 
         ds = protectedDataset(datasetId)
 
-        if args.get('as_file'):
+        if args.get('as_file').lower().startswith('t'):
             filepath = ds.expressionFilePath()
             return send_from_directory(os.path.dirname(filepath), os.path.basename(filepath), as_attachment=True, 
                 attachment_filename="stemformatics_dataset_%s.%s.tsv" % (datasetId, args.get('key')))

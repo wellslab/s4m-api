@@ -134,6 +134,65 @@ def sunburstData(dataFrame, childKey='final_cell_type', parentKey='parental_cell
 
     return df
 
+def sampleSummaryTable():
+    """Return a pandas DataFrame which summaries sample data we have in the system.
+    """
+    # Focus on these datasets
+    datasetIds = datasetMetadataFromQuery(ids_only=True, public_only=True)
+
+    # Part 1: Count most commonly used cell type values. Since we don't have a very complete sample annotation
+    # use the following fields as synonyms to collect together
+    keysToUse = ['cell_type','parental_cell_type','final_cell_type','sample_type']
+    samples = samplesFromDatasetIds(datasetIds)
+    samples = samples[keysToUse]
+    
+    # For each unique value in this matrix, create a set of sample ids
+    valuesToIgnore = ['E7','Day_7','E6','Day_6','E5','Day_5','LPS 24hr','IFNg 24hr','LPS 2hr']
+    valuesToCollapse = {'induced pluripotent stem cell':'iPSC', 'mesenchymal stromal cell':'MSC', 'embryonic stem cell':'ESC', 'hiPSC':'iPSC'}
+    values = {}
+    for column in samples.columns:
+        s = samples[column]
+        for item in s.unique():
+            if item in valuesToIgnore: continue
+            sampleIds = set(s[s==item].index.tolist())
+            itemToUSe = valuesToCollapse.get(item, item)
+            if itemToUSe in values:
+                values[itemToUSe] = values[itemToUSe].union(sampleIds)
+            else:
+                values[itemToUSe] = sampleIds
+
+    # Sort values by number of sample ids and show the highest
+    values = [(len(val),key) for key,val in values.items()]
+    for item in sorted(values, reverse=True)[:15]:
+        print("{sample:'%s', number_of_samples:%s}" % (item[1],item[0]))
+
+    return 'done'
+
+    keysToIgnore = ['sample_id','dataset_id','organism','media','sample_type_long','sample_description',
+                    'external_source_id','treatment','sex','labelling','reprogramming_method','sample_name_long',
+                    'facs_profile']
+    for key in Dataset.sample_fields:
+        if key in keysToIgnore: continue
+        values = allValues('samples', key, includeCount=True)
+        values = values.loc[[index for index in values.index if index!='']].sort_values(ascending=False)
+        print(key, values[:3].index.tolist(), values[:3].tolist())
+
+    focusParentKey = 'tissue_of_origin'
+    focusParentValues = ['blood','bone marrow']
+    focusChildKey = 'cell_type'
+    result = {}
+
+    params = {"dataset_id": {"$in": datasetIds}}
+    for parentValue in focusParentValues:
+        params[focusParentKey] = parentValue
+        cursor = database['samples'].find(params, {focusChildKey:1, "_id":0})
+        values = [item[focusChildKey] for item in cursor if pandas.notnull(item[focusChildKey])]
+        values = pandas.Series(values).value_counts().sort_values(ascending=False)
+        result[parentValue] = values[:6]
+
+    return result
+
+
 # ----------------------------------------------------------
 # Dataset class
 # ----------------------------------------------------------
@@ -259,6 +318,17 @@ def test_samples():
     assert df.at["6003_GSM396481", "cell_type"] == "hESC-derived monocyte"
 
 def test_datasetMetadataFromQuery():
+    df = datasetMetadataFromQuery()
+    print(df.shape)
+    df['projects'] = ['atlas' if len(item)>0 else '' for item in df['projects']]
+    #df = df[df['projects']!='']
+    #print(df.shape)
+    s = df.groupby('platform_type').size()
+    for key,val in s.items():
+        print('{platform_type:%s, number_of_datasets:%s}' % (key,val))
+    print(df.groupby(['projects','platform_type']).size().to_dict())
+
+def test_datasetMetadataVsDatasetLoadingTime():
     """Compare times for bulk query in mongo vs constructing a data frame after individual queries
     (457, 12) 0.012085914611816406
     (457, 13) 0.2130753993988037
@@ -275,3 +345,6 @@ def test_samplesFromQuery():
 
 def test_allValues():
     print(allValues("samples", "sex"))
+
+def test_sampleSummaryTable():
+    print(sampleSummaryTable())
