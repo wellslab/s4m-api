@@ -1,5 +1,13 @@
 """Model to handle atlas data in Stemformatics. Atlas data refers to an object of integrated data, 
-and comprises of expression and sample matrices, as well as supporting data such as colours and genes. 
+and comprises of expression and sample matrices, as well as supporting data such as colours and genes.
+
+colours.json
+coordinates.tsv
+expression.filtered.tsv
+expression.tsv
+genes.tsv
+Readme.txt
+samples.tsv
 
 Examle usage:
 --------------
@@ -16,17 +24,33 @@ def rankTransform(df):
     """
     return (df.shape[0] - df.rank(axis=0, ascending=False, na_option='bottom')+1)/df.shape[0]
 
+def atlasTypes():
+    """Return a dictionary of available atlas types and versions.
+        {'dc': {'versions': ['1.3', '1.2', '1.1'], 'current_version': '1.3', 'release_notes': 'Updated xxx...'}, ...}
+    Note that 'versions' will be reverse sorted.
+    """
+    os.chdir(os.environ['ATLAS_FILEPATH'])
+    dictToReturn = {}
+    filelist = os.listdir()
+    for atype in ['myeloid','blood','dc']:
+        dirlist = sorted([item for item in filelist if item.startswith('%s_' % atype)], reverse=True) # so we can ignore symlink
+        dictToReturn[atype] = {'current_version': os.readlink(atype).split('_')[1],
+                               'versions': [item.split('_')[1] for item in dirlist],
+                               'release_notes': [open(os.path.join(item, 'Readme.txt')).read() for item in dirlist]}
+    return dictToReturn
+
 class Atlas(object):
 
     # Full list of current atlas types
     all_atlas_types = ['myeloid','blood','dc']
 
-    def __init__(self, atlasType):
+    def __init__(self, atlasType, version=None):
         # each atlas type is under its own directory under ATLAS_FILEPATH
-        self.atlasFilePath = os.path.join(os.environ["ATLAS_FILEPATH"], atlasType)
+        directory = atlasType if version is None else '%s_%s' % (atlasType, version)
+        self.atlasFilePath = os.path.join(os.environ["ATLAS_FILEPATH"], directory)
 
         # Work out version based on link
-        self.version = os.readlink(self.atlasFilePath).split("_")[1]
+        self.version = os.readlink(self.atlasFilePath).split("_")[1] if version is None else version
 
         self.atlasType = atlasType
 
@@ -139,6 +163,50 @@ class Atlas(object):
 # ----------------------------------------------------------
 # tests: eg. $nosetests -s <filename>:ClassName.func_name
 # ----------------------------------------------------------
-def test_coloursAndOrdering():
-    atlas = Atlas("dc")
-    print(atlas.coloursAndOrdering())
+def test_atlas():
+    """Run tests for the current files in the atlas.
+    Since we can't pass an argument to this function through nosetests, use environ variables
+    > export ATLAS_TYPE=dc
+    (don't forget to also export ATLAS_FILEPATH=/path/to/atlas/files)
+    """
+    atlas = Atlas(os.environ['ATLAS_TYPE'])
+    
+    # Check that all files exist
+    filelist = ['colours.json','coordinates.tsv','expression.tsv','expression.filtered.tsv','genes.tsv','samples.tsv','Readme.txt']
+    assert set(filelist).issubset(set(os.listdir(atlas.atlasFilePath)))
+
+    # Read all the files
+    samples = atlas.sampleMatrix()
+    exp = atlas.expressionMatrix()
+    expFilt = atlas.expressionMatrix(filtered=True)
+    pca = atlas.pcaCoordinates()
+    colours = atlas.coloursAndOrdering()['colours']
+    ordering = atlas.coloursAndOrdering()['ordering']
+    genes = atlas.geneInfo()
+
+    # Check that sample ids match in all files
+    assert set(samples.index)==set(exp.columns)
+    assert set(samples.index)==set(expFilt.columns)
+    assert set(samples.index)==set(pca.index)
+
+    # Check that gene ids match between exp and genes
+    assert set(genes.index)==set(exp.index)
+    assert set(genes[genes['inclusion']].index)==set(expFilt.index)
+
+    # Check that colours and ordering have values which match those in samples
+    assert set(colours.keys()).issubset(set(samples.columns))
+    for key,val in colours.items():
+        assert set(val.keys()).issubset(set(samples[key]))
+
+    assert set(ordering.keys()).issubset(set(samples.columns))
+    for key,val in ordering.items():
+        assert set(val).issubset(set(samples[key]))
+
+def test_version():
+    atlas = Atlas('dc', version='1.2')
+    print(atlas.atlasFilePath, atlas.version)
+    atlas = Atlas('dc')
+    print(atlas.atlasFilePath, atlas.version)
+
+def test_atlasTypes():
+    print(atlasTypes()['dc']['release_notes'])

@@ -1,3 +1,6 @@
+"""
+Should no longer be needed, since we can use mygene.info.
+"""
 from flask_restful import reqparse, Resource
 
 from models import genes

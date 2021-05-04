@@ -12,6 +12,7 @@ class Atlas(Resource):
         """
         # Note that these arguments will not be case sensitive, coming from URL
         parser = reqparse.RequestParser()
+        parser.add_argument('version', type=str, required=False)
         parser.add_argument('orient', type=str, required=False, default="records")
         parser.add_argument('filtered', type=bool, required=False, default=False)
         parser.add_argument('query_string', type=str, required=False, default="")
@@ -19,7 +20,7 @@ class Atlas(Resource):
         parser.add_argument('as_file', type=bool, required=False, default=False)
         args = parser.parse_args()
 
-        atlas = atlases.Atlas(atlasType)
+        atlas = atlases.Atlas(atlasType, version=args.get('version'))
         if item=="coordinates":
             df = atlas.pcaCoordinates()
             filepath = os.path.join(atlas.atlasFilePath, "coordinates.tsv")
@@ -60,6 +61,12 @@ class Atlas(Resource):
             if args.get('orient')=='records':
                 df = df.reset_index()
             return df.to_dict(orient=args.get("orient"))
+
+class AtlasTypes(Resource):
+    def get(self):
+        """Return a dictionary of available atlas types and versions.
+        """
+        return atlases.atlasTypes()
 
 class AtlasProjection(Resource):
     def post(self, atlasType, dataSource):

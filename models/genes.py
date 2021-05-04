@@ -1,5 +1,6 @@
 """
 Main interface to gene annotation data.
+- Should no longer be needed, since we can use mygene.info.
 """
 import pymongo, os, pandas
 from models.utilities import mongoClient

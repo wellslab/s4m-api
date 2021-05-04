@@ -34,10 +34,11 @@ api.add_resource(datasets.ValuesSamples, '/values/samples/<key>')
 
 # Atlas data
 api.add_resource(atlases.Atlas, '/atlases/<atlasType>/<item>')
+api.add_resource(atlases.AtlasTypes, '/atlas-types')
 api.add_resource(atlases.AtlasProjection, '/atlas-projection/<atlasType>/<dataSource>')
 
-# Gene annotation data
-api.add_resource(genes.Geneset, '/genes')
+# Gene annotation data - use mygene.info instead of using my own
+# api.add_resource(genes.Geneset, '/genes')
 
 # API for authentication
 api.add_resource(auth.AuthLogin, '/auth/login')

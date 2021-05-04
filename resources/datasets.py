@@ -89,7 +89,7 @@ class DatasetExpression(Resource):
 
         ds = protectedDataset(datasetId)
 
-        if args.get('as_file').lower().startswith('t'):
+        if args.get('as_file').lower().startswith('t'):  # file download for entire expression matrix - ignore gene_id
             filepath = ds.expressionFilePath()
             return send_from_directory(os.path.dirname(filepath), os.path.basename(filepath), as_attachment=True, 
                 attachment_filename="stemformatics_dataset_%s.%s.tsv" % (datasetId, args.get('key')))
