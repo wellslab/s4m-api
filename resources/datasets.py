@@ -6,6 +6,8 @@ from resources import auth
 from models import datasets, genes
 from resources.errors import DatasetIdNotFoundError, DatasetIsPrivateError, DatasetGeneIdNotInExpressionError, UserNotAuthenticatedError
 
+_exclude_some_datasets = [6131]
+
 def protectedDataset(datasetId):
     """For many classes here where we check if a dataset is private or not before proceding, this convenience function peforms
     the taks and returns the datasets.Dataset instance.
@@ -108,17 +110,32 @@ class DatasetPca(Resource):
         """
         parser = reqparse.RequestParser()
         parser.add_argument('orient', type=str, required=False, default="records")
+        parser.add_argument('dims', type=int, required=False, default=20)
         args = parser.parse_args()
 
         ds = protectedDataset(datasetId)
-        return {'coordinates': ds.pcaCoordinates().to_dict(orient=args.get('orient')), 
-                'attributes': ds.pcaAttributes().to_dict(orient=args.get('orient'))}
+        coords = ds.pcaCoordinates()
+        attributes = ds.pcaAttributes()
+
+        # some datasets (eg 6646) may have really large number of PCA dimensions, but we don't need so many
+        coords = coords.iloc[:,:args.get('dims')]
+        attributes = attributes.iloc[:args.get('dims'),:]
+
+        if args.get('orient')=='records':
+            coords = coords.reset_index()
+            attributes = attributes.reset_index()
+
+        return {'coordinates': coords.to_dict(orient=args.get('orient')), 
+                'attributes': attributes.to_dict(orient=args.get('orient'))}
 
 class DatasetSearch(Resource):
     def get(self):
         """Return matching dataset + sample info based on query.
         Note that in the current implementation, if none of the parameters have been specified or other parameters
         not recognised here have been specified, this will fetch data for all datasets.
+        Some datasets are not ready to be exposed to the public - such as 6131, which is not in the normal format.
+        Hence by default, exclude_some_datasets is set to true and will only exclude this hard coded list of datasets
+        here. Set this to 'f' or 'false' to include these datasets in this search results.
         """
         parser = reqparse.RequestParser()
         parser.add_argument('dataset_id', type=str, required=False, action='append') # list of dataset ids
@@ -128,6 +145,7 @@ class DatasetSearch(Resource):
         parser.add_argument('name', type=str, required=False)
         parser.add_argument('format', type=str, required=False)  # ['sunburst1','sunburst2']
         parser.add_argument('limit', type=int, required=False)
+        parser.add_argument('exclude_some_datasets', type=int, required=False, default="True")
         args = parser.parse_args()
 
         publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
@@ -138,6 +156,8 @@ class DatasetSearch(Resource):
                                                projects=args.get("projects"),
                                                limit=args.get("limit"),
                                                public_only=publicOnly)
+        if not args.get('exclude_some_datasets').lower().startswith('f'):
+            df = df.loc[[index for index in df.index if index not in _exclude_some_datasets]]
         samples = datasets.samplesFromDatasetIds(df.index.tolist())
 
         if args.get('format')=='sunburst1':  # Returns sunburst plot data, rather than dataset + samples data
@@ -178,6 +198,7 @@ class SampleSearch(Resource):
         parser.add_argument('field', type=str, required=False, action='append')  # list of fields to include
         parser.add_argument('limit', type=int, required=False, default=50)
         parser.add_argument('orient', type=str, required=False, default='records')
+        parser.add_argument('exclude_some_datasets', type=int, required=False, default="True")
         args = parser.parse_args()
 
         publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
@@ -185,6 +206,8 @@ class SampleSearch(Resource):
                                                query_string=args.get("query_string"),
                                                limit=args.get("limit"),
                                                public_only=publicOnly)
+        if not args.get('exclude_some_datasets').lower().startswith('f'):
+            df = df.loc[[index for index in df.index if index not in _exclude_some_datasets]]
         samples = datasets.samplesFromDatasetIds(df.index.tolist())
 
         # subset columns of samples if specified

@@ -29,9 +29,10 @@ def checkMissingData(publicDatasetsOnly=False, atlasDatasetsOnly=False, checkSam
     datasetIdsFromMetadata = set([item["dataset_id"] for item in database["datasets"].find(option)])
     datasetIdsFromSamples = set([item["dataset_id"] for item in database["samples"].find({})])
     datasetIdsFromExpression = set()
-    for item in os.listdir(os.environ.get("EXPRESSION_FILEPATH")):
+    for item in os.listdir(os.environ["EXPRESSION_FILEPATH"]):
         match = re.findall("^\d{4}", item)
-        if len(match)>0: datasetIdsFromExpression.add(int(match[0]))
+        if len(match)>0 and os.path.exists(os.path.join(os.environ['EXPRESSION_FILEPATH'], match[0], '%s.raw.tsv' % match[0])): 
+            datasetIdsFromExpression.add(int(match[0]))
     datasetIdsFromAtlasFiles = set()
     for atlasType in atlases.Atlas.all_atlas_types:
         datasetIdsFromAtlasFiles =  datasetIdsFromAtlasFiles.union(set(atlases.Atlas(atlasType).datasetIds()))
