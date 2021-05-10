@@ -84,7 +84,15 @@ def allValues(collection, key, includeCount=False, public_only=True):
         params = {"dataset_id": {"$in": datasetMetadataFromQuery(ids_only=True, public_only=True)}}
 
     cursor = database[collection].find(params, {key:1, "_id":0})
-    values = ["" if pandas.isnull(item[key]) else item[key] for item in cursor]
+
+    # Deal with arrays
+    values = [','.join(item[key]) if isinstance(item.get(key), list) else item.get(key) for item in cursor]
+
+    # Deal with nulls
+    values = ["" if pandas.isnull(item) else item for item in values]
+    if len(set(values))==1 and values[0]=="": # assume no matching key
+        return None
+
     if includeCount:
         return pandas.Series(values).value_counts()
     else:

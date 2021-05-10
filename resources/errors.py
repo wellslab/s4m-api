@@ -18,6 +18,9 @@ class DatasetProjectionFailedError(HTTPException):
 class UserNotAuthenticatedError(HTTPException):
     pass
 
+class KeyNotFoundError(HTTPException):
+    pass
+
 errors = {
     "DatasetIdNotFoundError": {
         "message": "Dataset id not found in the system.",
@@ -41,6 +44,10 @@ errors = {
     },
     "UserNotAuthenticatedError": {
         "message": "User authentication failed.",
+        "status": 400
+    },
+    "KeyNotFoundError": {
+        "message": "Key not found in the data.",
         "status": 400
     },
 }
