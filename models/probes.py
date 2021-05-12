@@ -79,6 +79,7 @@ def probeMappingFilepath(**kwargs):
                        'Agilent-014850 Whole Human Genome Microarray 4x44K G4112F':{'manufacturer':'Agilent', 'platform':'4x44 014850 G4112F'},
                        'Illumina Human-6 v2.0 Expression BeadChip':{'manufacturer':'Illumina', 'platform':'HumanWG-6', 'version':'V2'},
                        'Illumina HumanRef-8 v2.0 Expression BeadChip':{'manufacturer':'Illumina', 'platform':'HumanRef-8', 'version':'V2'},
+                       'Affymetrix HT Human Genome U133A Array [HT_HG-U133A]':{'manufacturer':'Affymetrix', 'platform':'HT-HG-U133A',},
                       }
         #print(platform)
         if platform in platformRep:
@@ -104,6 +105,8 @@ def probeMappingFilepath(**kwargs):
         search = re.search(r"\[(.*)\]", platform)  # match stuff in the square brackets
         if search:
             subset = df[df['platform']==search.group(1)]
+    if len(subset)==0:  # try just first word in platform
+        subset = df[(df['manufacturer']==manufacturer) & (df['platform']==platform.split(' ')[0])]
 
     return _filepathFromSubset(subset)
 

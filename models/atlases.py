@@ -129,6 +129,9 @@ class Atlas(object):
         genes = self.geneInfo()
 
         commonGenes = testData.index.intersection(df.index)  # common index between test and atlas
+        if len(testData)!=len(set(testData.index)):
+            result["error"] = "This expression data contain duplicate index. Please remove these first."
+
         if len(commonGenes)==0:
             result["error"] = "No genes common between test data and atlas, likely due to row ids not in Ensembl ids."
             

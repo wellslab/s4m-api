@@ -6,7 +6,7 @@ from resources import auth
 from models import datasets, genes
 from resources.errors import DatasetIdNotFoundError, DatasetIsPrivateError, DatasetGeneIdNotInExpressionError, UserNotAuthenticatedError, KeyNotFoundError
 
-_exclude_some_datasets = [6127, 6130, 6131, 6149, 6150, 6151, 6155, 6156, 6187, 6197, 6368, 6655, 6754, 6776, 6948, 7012, 7115, 7209, 7217, 7218, 7250, 7311, 7401]
+_exclude_some_datasets = [5002, 6127, 6130, 6131, 6149, 6150, 6151, 6155, 6156, 6187, 6197, 6368, 6655, 6754, 6776, 6948, 7012, 7115, 7209, 7217, 7218, 7250, 7311, 7401]
 
 def protectedDataset(datasetId):
     """For many classes here where we check if a dataset is private or not before proceding, this convenience function peforms
@@ -128,7 +128,7 @@ class DatasetSearch(Resource):
         Note that in the current implementation, if none of the parameters have been specified or other parameters
         not recognised here have been specified, this will fetch data for all datasets.
         Some datasets are not ready to be exposed to the public - such as 6131, which is not in the normal format.
-        Hence by default, exclude_some_datasets is set to true and will only exclude this hard coded list of datasets
+        Hence by default, exclude_some_datasets is set to true by default and will exclude this hard coded list of datasets
         here. Set this to 'f' or 'false' to include these datasets in this search results.
         """
         parser = reqparse.RequestParser()
@@ -140,6 +140,7 @@ class DatasetSearch(Resource):
         parser.add_argument('format', type=str, required=False)  # ['sunburst1','sunburst2']
         parser.add_argument('limit', type=int, required=False)
         parser.add_argument('exclude_some_datasets', type=str, required=False, default="True")
+        parser.add_argument('include_samples_query', type=str, required=False, default="False")
         args = parser.parse_args()
 
         publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
@@ -149,7 +150,8 @@ class DatasetSearch(Resource):
                                                platform_type=args.get("platform_type"),
                                                projects=args.get("projects"),
                                                limit=args.get("limit"),
-                                               public_only=publicOnly)
+                                               public_only=publicOnly,
+                                               include_samples_query=args.get("include_samples_query").lower().startswith('t'))
         if not args.get('exclude_some_datasets').lower().startswith('f'):
             df = df.loc[[index for index in df.index if index not in _exclude_some_datasets]]
         samples = datasets.samplesFromDatasetIds(df.index.tolist())
@@ -215,47 +217,29 @@ class SampleSearch(Resource):
         return samples.fillna("").to_dict(orient=args.get('orient'))
 
 
-class ValuesDatasets(Resource):
-    def get(self, key):
+class Values(Resource):
+    def get(self, collection, key):
         """Return all values for a key (=field) in the datasets collection.
         """
         parser = reqparse.RequestParser()
         parser.add_argument('include_count', type=str, required=False, default="false")
         args = parser.parse_args()
 
+        if collection not in ['datasets','samples']:
+            raise KeyNotFoundError
+
         publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
         if args.get('include_count').lower().startswith('t'):
-            values = datasets.allValues("datasets", key, includeCount=True, public_only=publicOnly)
+            values = datasets.allValues(collection, key, includeCount=True, public_only=publicOnly, excludeDatasets=_exclude_some_datasets)
             if values is None:
                 raise KeyNotFoundError
             else:
                 return values.to_dict() 
         else:
-            values = datasets.allValues("datasets", key, public_only=publicOnly)
+            values = datasets.allValues(collection, key, public_only=publicOnly, excludeDatasets=_exclude_some_datasets)
             if values is None:
                 raise KeyNotFoundError
             else:
                 return sorted(values)
 
-class ValuesSamples(Resource):
-    def get(self, key):
-        """Return all values for a key (=field) in the samples collection.
-        """
-        parser = reqparse.RequestParser()
-        parser.add_argument('include_count', type=str, required=False, default="false")
-        args = parser.parse_args()
-
-        publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
-        if args.get('include_count').lower().startswith('t'):
-            values = datasets.allValues("samples", key, includeCount=True, public_only=publicOnly)
-            if values is None:
-                raise KeyNotFoundError
-            else:
-                return values.to_dict() 
-        else:
-            values = datasets.allValues("samples", key, public_only=publicOnly)
-            if values is None:
-                raise KeyNotFoundError
-            else:
-                return sorted(values)
 

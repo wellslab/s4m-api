@@ -29,8 +29,7 @@ api.add_resource(datasets.DatasetSearch, '/search/datasets')
 api.add_resource(datasets.SampleSearch, '/search/samples')
 
 # Get available values
-api.add_resource(datasets.ValuesDatasets, '/values/datasets/<key>')
-api.add_resource(datasets.ValuesSamples, '/values/samples/<key>')
+api.add_resource(datasets.Values, '/values/<collection>/<key>')
 
 # Atlas data
 api.add_resource(atlases.Atlas, '/atlases/<atlasType>/<item>')

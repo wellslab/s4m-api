@@ -27,8 +27,10 @@ def datasetMetadataFromQuery(**kwargs):
     limit = kwargs.get("limit")
     ids_only = kwargs.get('ids_only', False)
     public_only = kwargs.get("public_only", True)
+    include_samples_query = kwargs.get("include_samples_query", False)
 
-    dataset_id = kwargs.get("dataset_id")
+    dataset_id = kwargs.get("dataset_id",[])
+    if dataset_id is None: dataset_id = []
     name = kwargs.get("name")
 
     query_string = kwargs.get("query_string")
@@ -41,8 +43,20 @@ def datasetMetadataFromQuery(**kwargs):
 
     if public_only:
         params['private'] = False
-    if dataset_id:
-        params['dataset_id'] = {"$in": [int(item) for item in dataset_id]}
+
+    datasetIds = []  # this is additional dataset ids to search, based on sample search
+    if include_samples_query and query_string:  # also perform text search in samples
+        sampleSearch = database["samples"].find({'$text': {'$search':query_string}}, {'dataset_id':1})
+        datasetIds = [item['dataset_id'] for item in sampleSearch]
+
+    if len(dataset_id)>0 and len(datasetIds)>0:  # find common dataset ids
+        datasetIds = list(set(datasetIds).intersection(set([int(item) for item in dataset_id])))
+    elif len(dataset_id)>0 and len(datasetIds)==0: # just specified by parameter
+        datasetIds = [int(item) for item in dataset_id]
+    
+    if len(datasetIds)>0:
+        params['dataset_id'] = {"$in": datasetIds}
+
     if platform_type:
         params['platform_type'] = platform_type
     if projects:
@@ -74,19 +88,23 @@ def samplesFromDatasetIds(datasetIds):
     cursor = database["samples"].find(params, {"_id":0})
     return pandas.DataFrame(cursor).set_index("sample_id") if cursor.count()!=0 else pandas.DataFrame()
 
-def allValues(collection, key, includeCount=False, public_only=True):
+def allValues(collection, key, includeCount=False, public_only=True, excludeDatasets=[]):
     """Return a set of all the values for a key in a collection.
     Eg: allValues("samples", "sex") returns {'', 'female', 'male'}
-    If includeCount is True, returns a pandas Series that includes count of each value
+    If includeCount is True, returns a pandas Series that includes count of each value.
+    excludeDatasets can be a list of dataset ids to exclude explicitly from getting these values.
     """
     params = {}
     if public_only:
         params = {"dataset_id": {"$in": datasetMetadataFromQuery(ids_only=True, public_only=True)}}
 
-    cursor = database[collection].find(params, {key:1, "_id":0})
+    cursor = database[collection].find(params, {key:1, "dataset_id":1, "_id":0})
+
+    # Deal with excludeDatasets
+    values = [item.get(key) for item in cursor if len(excludeDatasets)==0 or item['dataset_id'] not in excludeDatasets]
 
     # Deal with arrays
-    values = [','.join(item[key]) if isinstance(item.get(key), list) else item.get(key) for item in cursor]
+    values = [','.join(item) if isinstance(item, list) else item for item in values]
 
     # Deal with nulls
     values = ["" if pandas.isnull(item) else item for item in values]
@@ -144,6 +162,7 @@ def sunburstData(dataFrame, childKey='final_cell_type', parentKey='parental_cell
 
 def sampleSummaryTable():
     """Return a pandas DataFrame which summaries sample data we have in the system.
+    Work in progress...
     """
     # Focus on these datasets
     datasetIds = datasetMetadataFromQuery(ids_only=True, public_only=True)
