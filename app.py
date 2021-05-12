@@ -15,6 +15,11 @@ app = Flask(__name__)
 api = Api(app, errors=errors)
 #cors = CORS(app)
 
+# Added this to enable larger file uploads (this makes the limit 100Mb).
+# According to this https://stackoverflow.com/questions/31873989/rejecting-files-greater-than-a-certain-amount-with-flask-uploads
+# not setting this should allow any size upload, but the server returns 403 for larger file uploads.
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
+
 if os.getenv('FLASK_ENV')!='development':
     logging.basicConfig(filename='app.log', level=logging.ERROR, format=f'%(asctime)s %(levelname)s %(name)s : %(message)s')
 
