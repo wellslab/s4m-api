@@ -17,7 +17,7 @@ api = Api(app, errors=errors)
 
 # Added this to enable larger file uploads (this makes the limit 100Mb).
 # According to this https://stackoverflow.com/questions/31873989/rejecting-files-greater-than-a-certain-amount-with-flask-uploads
-# not setting this should allow any size upload, but the server returns 403 for larger file uploads.
+# not setting this should allow any size upload, but the server returns 413 error for larger file uploads.
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
 
 if os.getenv('FLASK_ENV')!='development':

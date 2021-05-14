@@ -92,9 +92,17 @@ class DatasetExpression(Resource):
         ds = protectedDataset(datasetId)
 
         if args.get('as_file').lower().startswith('t'):  # file download for entire expression matrix - ignore gene_id
-            filepath = ds.expressionFilePath()
-            return send_from_directory(os.path.dirname(filepath), os.path.basename(filepath), as_attachment=True, 
-                attachment_filename="stemformatics_dataset_%s.%s.tsv" % (datasetId, args.get('key')))
+            filename = "stemformatics_dataset_%s.%s.tsv" % (datasetId, args.get('key'))  # user will see this name for download
+            if ds.metadata()['platform_type']=='RNASeq' and args.get('key')=='cpm': # we don't have cpm saved on file - calculate it and return it
+                from tempfile import NamedTemporaryFile
+                from flask import send_file
+                with NamedTemporaryFile() as temp_file:
+                    df = ds.expressionMatrix(key=args.get('key'))
+                    df.to_csv(temp_file.name, sep='\t')
+                    return send_file(temp_file.name, as_attachment=True, attachment_filename=filename)
+            else:
+                filepath = ds.expressionFilePath(args.get('key'))
+                return send_from_directory(os.path.dirname(filepath), os.path.basename(filepath), as_attachment=True, attachment_filename=filename)
         else:
             df = ds.expressionMatrix(key=args.get('key')).loc[args.get('gene_id')]
             if len(df)>0:  # no need to reset index for orient=records, since we already know gene id

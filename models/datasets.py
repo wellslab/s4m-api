@@ -15,6 +15,10 @@ database = mongoClient()["dataportal"]
 # ----------------------------------------------------------
 # Functions
 # ----------------------------------------------------------
+def cpm(df):
+    """Return the counts per million version of data frame.
+    """
+    return (df * 1000000).div(df.sum(axis = 0), axis = 1)
 
 def datasetMetadataFromQuery(**kwargs):
     """Return DataFrame of dataset metadata which match a query. Rows will have dataset ids,
@@ -300,7 +304,7 @@ class Dataset(object):
         """
         if self.metadata()['platform_type']=='RNASeq' and key=='cpm': # get raw and calculate cpm
             df = pandas.read_csv(self.expressionFilePath(key='raw'), sep="\t", index_col=0)
-            df = (df * 1000000).div(df.sum(axis = 0), axis = 1)    # counts per million
+            df = cpm(df)
         else:
             df = pandas.read_csv(self.expressionFilePath(key=key), sep="\t", index_col=0)
 
