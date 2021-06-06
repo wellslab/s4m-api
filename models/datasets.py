@@ -33,7 +33,7 @@ def datasetMetadataFromQuery(**kwargs):
     public_only = kwargs.get("public_only", True)
     include_samples_query = kwargs.get("include_samples_query", False)
 
-    dataset_id = kwargs.get("dataset_id",[])
+    dataset_id = kwargs.get("dataset_id",[]) # list of dataset ids specified in the query
     if dataset_id is None: dataset_id = []
     name = kwargs.get("name")
 
@@ -49,9 +49,12 @@ def datasetMetadataFromQuery(**kwargs):
         params['private'] = False
 
     datasetIds = []  # this is additional dataset ids to search, based on sample search
-    if include_samples_query and query_string:  # also perform text search in samples
+    if include_samples_query and query_string:  
+        # perform text search in both datasets and samples and use union
         sampleSearch = database["samples"].find({'$text': {'$search':query_string}}, {'dataset_id':1})
         datasetIds = [item['dataset_id'] for item in sampleSearch]
+        datasetsSearch = database["datasets"].find({'$text': {'$search':query_string}}, {'dataset_id':1})
+        datasetIds = list(set(datasetIds).union(set([item['dataset_id'] for item in datasetsSearch])))
 
     if len(dataset_id)>0 and len(datasetIds)>0:  # find common dataset ids
         datasetIds = list(set(datasetIds).intersection(set([int(item) for item in dataset_id])))
@@ -72,7 +75,7 @@ def datasetMetadataFromQuery(**kwargs):
         params["status"] = status
     if name:
         params["name"] = name
-    if query_string:
+    if query_string and not include_samples_query:  # otherwise it's been done already above
         params['$text'] = {"$search": query_string}
 
     if limit:
