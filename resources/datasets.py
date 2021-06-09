@@ -208,13 +208,19 @@ class DatasetSearch(Resource):
         df['tissue_of_origin'] = [','.join(samples[samples['dataset_id']==index]['tissue_of_origin'].unique().tolist()) for index in df.index]
 
         # Add some derived columns for convenience
-        displayNames, pubmedIds = [], []
+        displayNames, pubmedIds, years = [], [], []
         for name in df["name"]:
             items = name.split("_")
-            displayNames.append("{} ({})".format(items[0],items[1]))
             pubmedIds.append(items[2])
+            try:
+                years.append(int(items[1]))
+                displayNames.append("{} ({})".format(items[0],items[1]))
+            except ValueError:  # assume wrong year string to convert to int
+                years.append(0)
+                displayNames.append("{}".format(items[0]))
         df["display_name"] = displayNames
         df["pubmed_id"] = pubmedIds
+        df["year"] = years
         
         # Sort
         df = df.sort_values(args.get('sort_field'), ascending=args.get('sort_ascending').lower().startswith('t'))
