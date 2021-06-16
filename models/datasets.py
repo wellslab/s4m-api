@@ -303,7 +303,8 @@ class Dataset(object):
     # expression matrix -------------------------------------
     def expressionMatrix(self, key="raw"):
         """Return expression matrix for this dataset as a pandas DataFrame.
-        key is one of ["raw","gene"] for microarray and ["raw","cpm"] for rna-seq.
+        key is one of ["raw","genes"] for microarray and ["raw","cpm"] for RNASeq.
+        Using 'genes' for RNASeq will still work, and fetch 'raw' in that case.
         """
         if self.metadata()['platform_type']=='RNASeq' and key=='cpm': # get raw and calculate cpm
             df = pandas.read_csv(self.expressionFilePath(key='raw'), sep="\t", index_col=0)
@@ -315,9 +316,13 @@ class Dataset(object):
 
     def expressionFilePath(self, key="raw"):
         """Return the full path to the expression file.
+        key is one of ["raw","genes"] for microarray and ["raw"] for RNASeq.
+        Using 'genes' for RNASeq will still work, and fetch 'raw' in that case.
         """
         if "EXPRESSION_FILEPATH" not in os.environ:
             raise ExpressionFilePathNotFoundError("EXPRESSION_FILEPATH not found in os.environ.")
+        if self.metadata()['platform_type']=='RNASeq' and key=='genes': # make it same as raw
+            key = 'raw'
         return os.path.join(os.environ["EXPRESSION_FILEPATH"], "%s/%s.%s.tsv" % (self.datasetId, self.datasetId, key))
 
     # pca data -------------------------------------

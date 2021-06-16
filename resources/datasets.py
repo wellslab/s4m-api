@@ -105,7 +105,9 @@ class DatasetExpression(Resource):
                 return send_from_directory(os.path.dirname(filepath), os.path.basename(filepath), as_attachment=True, attachment_filename=filename)
         else:
             df = ds.expressionMatrix(key=args.get('key')).loc[args.get('gene_id')]
-            if len(df)>0:  # no need to reset index for orient=records, since we already know gene id
+            if args.get('orient')=='records':
+                df = df.reset_index()
+            if len(df)>0:
                 return df.to_dict(orient=args.get('orient'))
             else:
                 raise DatasetGeneIdNotInExpressionError
