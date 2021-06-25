@@ -16,7 +16,7 @@ class Atlas(Resource):
         parser.add_argument('orient', type=str, required=False, default="records")
         parser.add_argument('filtered', type=bool, required=False, default=False)
         parser.add_argument('query_string', type=str, required=False, default="")
-        parser.add_argument('gene_id', type=str, required=False, default="", action="append")  # list of strings
+        parser.add_argument('gene_id', type=str, required=False)  # comma separated list of strings
         parser.add_argument('as_file', type=bool, required=False, default=False)
         args = parser.parse_args()
 
@@ -30,7 +30,8 @@ class Atlas(Resource):
             filepath = os.path.join(atlas.atlasFilePath, "samples.tsv")
 
         elif item=="expression-values":  # subset expression matrix on gene ids specified
-            df = atlas.expressionMatrix(filtered=args.get('filtered')).loc[args.get("gene_id")]
+            geneIds = args.get('gene_id').split(',') if args.get('gene_id') is not None else []
+            df = atlas.expressionMatrix(filtered=args.get('filtered')).loc[geneIds]
         
         elif item=="expression-file":  # this is served as a file download regardless of as_file flag
             filepath = atlas.expressionFilePath(filtered=args.get('filtered'))

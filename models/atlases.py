@@ -141,15 +141,17 @@ class Atlas(object):
         if result["error"]!="":
             return result
 
-        # We reindex testData on df.index, not on commonGenes, since pca is done on df. This means any genes in df not found in 
-        # testData will gene None assigned - we will live with this, as long as there aren't so many.
-        dfTest = rankTransform(testData.reindex(df.index))
+        # We reindex testData on df.index, not on commonGenes, since pca is done on df and not on commonGenes. 
+        # This means any genes in testData not found in df will be dropped, and any genes in df not found in testData will be assigned Nan
+        # - we convert these to zero and live with this, as long as there aren't so many!
+        dfTest = rankTransform(testData.reindex(df.index).fillna(0))
         expression = pandas.concat([df, dfTest], axis=1)
 
         # perform pca on atlas
         from sklearn.decomposition import PCA
         pca = PCA(n_components=10, svd_solver='full')
         coords = pandas.DataFrame(pca.fit_transform(df.values.T), index=df.columns)  # can also just run fit
+        coords.to_csv("/mnt/stemformatics-data/backups/dc_atlas_coordinates.tsv", sep="\t")
         
         # make projection
         result["coords"] = pandas.DataFrame(pca.transform(dfTest.values.T)[:,:3], index=dfTest.columns)

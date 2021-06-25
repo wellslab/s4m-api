@@ -36,13 +36,13 @@ api.add_resource(datasets.SampleSearch, '/search/samples')
 # Get available values
 api.add_resource(datasets.Values, '/values/<collection>/<key>')
 
+# Genesets based on expression analyses
+api.add_resource(datasets.Geneset, '/geneset')
+
 # Atlas data
 api.add_resource(atlases.Atlas, '/atlases/<atlasType>/<item>')
 api.add_resource(atlases.AtlasTypes, '/atlas-types')
 api.add_resource(atlases.AtlasProjection, '/atlas-projection/<atlasType>/<dataSource>')
-
-# Gene annotation data - use mygene.info instead of using my own
-# api.add_resource(genes.Geneset, '/genes')
 
 # API for authentication
 api.add_resource(auth.AuthLogin, '/auth/login')

@@ -82,8 +82,9 @@ class DatasetExpression(Resource):
         """Return expression table for a dataset with datasetId and gene id(s).
         """
         parser = reqparse.RequestParser()
-        parser.add_argument('gene_id', type=str, required=False, default="", action="append")  # will return a list
+        parser.add_argument('gene_id', type=str, required=False)  # will return a list
         parser.add_argument('key', type=str, required=False, default="raw")
+        parser.add_argument('log2', type=str, required=False, default="False") # will apply numpy.log2(exp+1) if true
         parser.add_argument('orient', type=str, required=False, default="records")
         parser.add_argument('as_file', type=str, required=False, default="False")  
             # - if set to boolean, any string is parsed as true
@@ -104,7 +105,8 @@ class DatasetExpression(Resource):
                 filepath = ds.expressionFilePath(args.get('key'))
                 return send_from_directory(os.path.dirname(filepath), os.path.basename(filepath), as_attachment=True, attachment_filename=filename)
         else:
-            df = ds.expressionMatrix(key=args.get('key')).loc[args.get('gene_id')]
+            geneIds = args.get('gene_id').split(',') if args.get('gene_id') is not None else []
+            df = ds.expressionMatrix(key=args.get('key'), applyLog2=args.get('log2').lower().startswith('t')).loc[geneIds]
             if args.get('orient')=='records':
                 df = df.reset_index()
             if len(df)>0:
@@ -151,7 +153,7 @@ class DatasetSearch(Resource):
         """
         parser = reqparse.RequestParser()
         # commonly used query keys
-        parser.add_argument('dataset_id', type=str, required=False, action='append') # list of dataset ids
+        parser.add_argument('dataset_id', type=str, required=False) # comma separated list of dataset ids
         parser.add_argument('query_string', type=str, required=False) # arbitrary query string - will perform text search
 
         # specific fields found in datasets
@@ -166,10 +168,10 @@ class DatasetSearch(Resource):
         # filtering
         parser.add_argument('exclude_some_datasets', type=str, required=False, default="True")
         parser.add_argument('include_samples_query', type=str, required=False, default="False")
-        parser.add_argument('filter_Project', type=str, required=False, action="append")
+        parser.add_argument('filter_Project', type=str, required=False)
         parser.add_argument('filter_platform_type', type=str, required=False)
-        parser.add_argument('filter_cell_type', type=str, required=False, action="append")
-        parser.add_argument('filter_tissue_of_origin', type=str, required=False, action="append")
+        parser.add_argument('filter_cell_type', type=str, required=False)
+        parser.add_argument('filter_tissue_of_origin', type=str, required=False)
 
         # sorting
         parser.add_argument('sort_field', type=str, required=False, default="name")
@@ -181,7 +183,7 @@ class DatasetSearch(Resource):
         args = parser.parse_args()
 
         publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
-        df = datasets.datasetMetadataFromQuery(dataset_id=args.get("dataset_id"),
+        df = datasets.datasetMetadataFromQuery(dataset_id=args.get("dataset_id").split(',') if args.get('dataset_id') is not None else [],
                                                name=args.get("name"),
                                                query_string=args.get("query_string"),
                                                platform_type=args.get("platform_type"),
@@ -240,16 +242,14 @@ class DatasetSearch(Resource):
             total = len(df)
 
             # filter_xxx params are applied here, so that counts can still count values before these filters are applied
-            # if args.get('filter_cell_type'):
-            #     df = df.loc[samples[samples['cell_type']==args.get('filter_cell_type')]['dataset_id']]
             if args.get('filter_Project'):
-                df = df[[any(value in item for value in args.get('filter_Project')) for item in df['Project']]]
+                df = df[[any(value in item for value in args.get('filter_Project').split(',')) for item in df['Project']]]
             if args.get('filter_platform_type'):
                 df = df[df['platform_type']==args.get('filter_platform_type')]
             if args.get('filter_cell_type'):
-                df = df[[any(value in item for value in args.get('filter_cell_type')) for item in df['cell_type']]]
+                df = df[[any(value in item for value in args.get('filter_cell_type').split(',')) for item in df['cell_type']]]
             if args.get('filter_tissue_of_origin'):
-                df = df[[any(value in item for value in args.get('filter_tissue_of_origin')) for item in df['tissue_of_origin']]]
+                df = df[[any(value in item for value in args.get('filter_tissue_of_origin').split(',')) for item in df['tissue_of_origin']]]
 
             start = args.get('pagination_start')
             limit = args.get('pagination_limit')
@@ -268,16 +268,16 @@ class SampleSearch(Resource):
         not recognised here have been specified, this will fetch data for all samples but a limit of 50 is imposed.
         """
         parser = reqparse.RequestParser()
-        parser.add_argument('dataset_id', type=str, required=False, action='append') # list of dataset ids
+        parser.add_argument('dataset_id', type=str, required=False) # comma separated list of dataset ids
         parser.add_argument('query_string', type=str, required=False)
-        parser.add_argument('field', type=str, required=False, default=[], action='append')  # list of fields to include
+        parser.add_argument('field', type=str, required=False, default='')  # comma separated list of fields to include
         parser.add_argument('limit', type=int, required=False, default=50)
         parser.add_argument('orient', type=str, required=False, default='records')
         parser.add_argument('exclude_some_datasets', type=str, required=False, default="True")
         args = parser.parse_args()
 
         publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
-        df = datasets.datasetMetadataFromQuery(dataset_id=args.get("dataset_id"),
+        df = datasets.datasetMetadataFromQuery(dataset_id=args.get("dataset_id").split(',') if args.get('dataset_id') is not None else [],
                                                query_string=args.get("query_string"),
                                                limit=args.get("limit"),
                                                public_only=publicOnly)
@@ -286,7 +286,7 @@ class SampleSearch(Resource):
         samples = datasets.samplesFromDatasetIds(df.index.tolist())
 
         # subset columns of samples if specified
-        commonCols = set(args.get('field')).intersection(set(samples.columns))
+        commonCols = set(args.get('field').split(',')).intersection(set(samples.columns))
         if commonCols:
             samples = samples[[item for item in samples.columns if item in commonCols]]
 
@@ -321,4 +321,7 @@ class Values(Resource):
             else:
                 return sorted(values)
 
-
+class Geneset(Resource):
+    def get(self):
+        df = pandas.read_csv(os.path.join(os.environ["EXPRESSION_FILEPATH"], "../received/jarny/DiffGenes-cell_type-monocyte.tsv"), sep="\t", index_col=0)
+        return df.reset_index().to_dict(orient="records")

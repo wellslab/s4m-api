@@ -36,7 +36,6 @@ def datasetMetadataFromQuery(**kwargs):
     dataset_id = kwargs.get("dataset_id",[]) # list of dataset ids specified in the query
     if dataset_id is None: dataset_id = []
     name = kwargs.get("name")
-
     query_string = kwargs.get("query_string")
     platform_type = kwargs.get("platform_type")
     projects = kwargs.get("projects")
@@ -261,7 +260,7 @@ class Dataset(object):
                "sample_description", "age_time", "sex", "reprogramming_method", "genetic_modification",
                "labelling", "developmental_stage", "treatment", "external_source_id"]
 
-    # All available platform_type
+    # All available platform_type values
     platform_types = ["Microarray", "RNASeq", "scRNASeq", "other"]
 
     def __init__(self, datasetId):
@@ -292,6 +291,9 @@ class Dataset(object):
         """
         return self._metadata
 
+    def platformType(self):
+        return self.metadata()['platform_type']
+
     # sample metadata -------------------------------------
     def samples(self):
         """
@@ -301,16 +303,22 @@ class Dataset(object):
         return pandas.DataFrame(cursor).set_index("sample_id") if cursor.count()!=0 else pandas.DataFrame()
 
     # expression matrix -------------------------------------
-    def expressionMatrix(self, key="raw"):
+    def expressionMatrix(self, key="raw", applyLog2=False):
         """Return expression matrix for this dataset as a pandas DataFrame.
         key is one of ["raw","genes"] for microarray and ["raw","cpm"] for RNASeq.
         Using 'genes' for RNASeq will still work, and fetch 'raw' in that case.
+        Using 'cpm' for Microarray will still work, and fetch 'genes' in that case.
         """
-        if self.metadata()['platform_type']=='RNASeq' and key=='cpm': # get raw and calculate cpm
+        if self.platformType()=='RNASeq' and key=='cpm': # get raw and calculate cpm
             df = pandas.read_csv(self.expressionFilePath(key='raw'), sep="\t", index_col=0)
             df = cpm(df)
+        elif self.platformType()=='Microarray' and key=='cpm':
+            df = pandas.read_csv(self.expressionFilePath(key='genes'), sep="\t", index_col=0)
         else:
             df = pandas.read_csv(self.expressionFilePath(key=key), sep="\t", index_col=0)
+
+        if applyLog2 and self.platformType()=='RNASeq' and df.max().max()>100: # 
+            df = numpy.log2(df+1)
 
         return df
 
@@ -318,11 +326,14 @@ class Dataset(object):
         """Return the full path to the expression file.
         key is one of ["raw","genes"] for microarray and ["raw"] for RNASeq.
         Using 'genes' for RNASeq will still work, and fetch 'raw' in that case.
+        Using 'cpm' for Microarray will still work, and fetch 'genes' in that case.
         """
         if "EXPRESSION_FILEPATH" not in os.environ:
             raise ExpressionFilePathNotFoundError("EXPRESSION_FILEPATH not found in os.environ.")
-        if self.metadata()['platform_type']=='RNASeq' and key=='genes': # make it same as raw
+        if self.platformType()=='RNASeq' and key=='genes': # make it same as raw
             key = 'raw'
+        elif self.platformType()=='Microarray' and key=='cpm': # make it same as genes
+            key = 'genes'
         return os.path.join(os.environ["EXPRESSION_FILEPATH"], "%s/%s.%s.tsv" % (self.datasetId, self.datasetId, key))
 
     # pca data -------------------------------------
