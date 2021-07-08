@@ -151,7 +151,6 @@ class Atlas(object):
         from sklearn.decomposition import PCA
         pca = PCA(n_components=10, svd_solver='full')
         coords = pandas.DataFrame(pca.fit_transform(df.values.T), index=df.columns)  # can also just run fit
-        coords.to_csv("/mnt/stemformatics-data/backups/dc_atlas_coordinates.tsv", sep="\t")
         
         # make projection
         result["coords"] = pandas.DataFrame(pca.transform(dfTest.values.T)[:,:3], index=dfTest.columns)
@@ -207,11 +206,24 @@ def test_atlas():
     for key,val in ordering.items():
         assert set(val).issubset(set(samples[key]))
 
+def test_projection():
+    from models import datasets
+    atlas = Atlas('dc')
+    ds = datasets.Dataset(2000)
+    df = ds.expressionMatrix(key='genes')
+    res = atlas.projection('test', df, includeCombinedCoords=False)
+    print(res)
+
 def test_version():
     atlas = Atlas('dc', version='1.2')
     print(atlas.atlasFilePath, atlas.version)
     atlas = Atlas('dc')
     print(atlas.atlasFilePath, atlas.version)
 
-def test_atlasTypes():
-    print(atlasTypes()['dc']['release_notes'])
+def reorderSampleColumns():
+    atlas = Atlas('myeloid')
+    path = os.path.join(atlas.atlasFilePath, "samples.tsv")
+    print(path)
+    df = atlas.sampleMatrix()
+    df = df[['Cell Type', 'Sample Source', 'Progenitor Type', 'Activation Status', 'Tissue', 'Disease State', 'Platform Category']]
+    df.to_csv(path, sep='\t')

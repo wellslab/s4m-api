@@ -6,7 +6,7 @@ Note that model here does not enforce rules on private and public datasets, henc
 to ensure that correct parameter is used to call the functions here, if trying to ensure only public datasets
 are returned, for example.
 """
-import pymongo, os, pandas
+import pymongo, os, pandas, numpy
 from models.utilities import mongoClient
 from models.atlases import Atlas
 
@@ -25,8 +25,7 @@ def datasetMetadataFromQuery(**kwargs):
     while columns will be attributes of dataset metadata. Use this instead of Dataset instance
     for fetching large numbers of datasets.
     If ids_only=True, only a list of dataset ids will be returned, instead of a DataFrame.
-    Note that currently query_string is searching only in datasets collection, rather than including samples.
-    This should be changed in future once samples is better annotated.
+    Note that query_string will search samples collection as well if include_samples_query=true.
     """
     limit = kwargs.get("limit")
     ids_only = kwargs.get('ids_only', False)
@@ -39,8 +38,9 @@ def datasetMetadataFromQuery(**kwargs):
     query_string = kwargs.get("query_string")
     platform_type = kwargs.get("platform_type")
     projects = kwargs.get("projects")
+    organism = kwargs.get("organism")
     status = kwargs.get("status")
-
+    
     params = {}
     attributes = {"dataset_id":1, "_id":0} if ids_only==True else {"_id":0}
 
@@ -54,6 +54,10 @@ def datasetMetadataFromQuery(**kwargs):
         datasetIds = [item['dataset_id'] for item in sampleSearch]
         datasetsSearch = database["datasets"].find({'$text': {'$search':query_string}}, {'dataset_id':1})
         datasetIds = list(set(datasetIds).union(set([item['dataset_id'] for item in datasetsSearch])))
+
+    if organism and organism!='all':  # restrict datasets to samples with this organism
+        sampleSearch = database["samples"].find({'organism': organism}, {'dataset_id':1})
+        datasetIds = list(set(datasetIds).union(set([item['dataset_id'] for item in sampleSearch])))
 
     if len(dataset_id)>0 and len(datasetIds)>0:  # find common dataset ids
         datasetIds = list(set(datasetIds).intersection(set([int(item) for item in dataset_id])))
@@ -94,7 +98,7 @@ def samplesFromDatasetIds(datasetIds):
     cursor = database["samples"].find(params, {"_id":0})
     return pandas.DataFrame(cursor).set_index("sample_id") if cursor.count()!=0 else pandas.DataFrame()
 
-def allValues(collection, key, includeCount=False, public_only=True, excludeDatasets=[]):
+def allValues(collection, key, includeCount=False, public_only=True, excludeDatasets=[], organism='homo sapiens'):
     """Return a set of all the values for a key in a collection.
     Eg: allValues("samples", "sex") returns {'', 'female', 'male'}
     If includeCount is True, returns a pandas Series that includes count of each value.
@@ -102,7 +106,7 @@ def allValues(collection, key, includeCount=False, public_only=True, excludeData
     """
     params = {}
     if public_only:
-        params = {"dataset_id": {"$in": datasetMetadataFromQuery(ids_only=True, public_only=True)}}
+        params = {"dataset_id": {"$in": datasetMetadataFromQuery(ids_only=True, public_only=True, organism=organism)}}
 
     cursor = database[collection].find(params, {key:1, "dataset_id":1, "_id":0})
 
@@ -165,6 +169,34 @@ def sunburstData(dataFrame, childKey='final_cell_type', parentKey='parental_cell
         df.at[item] = [item, '', sum(df[df['parents']==item]['values'].tolist(),[])]
 
     return df
+
+def dataAsZipfile(datasetIds, publicOnly=True):
+    """Return a zip file that contains all relevant files for a list of datasetIds.
+    """
+    import string, zipfile
+
+    # Create a name for the zip file using string and numpy.random
+    randString = ''.join(numpy.random.choice(list(string.ascii_lowercase), size=5))
+
+    # Dataset ids to focus on
+    datasetIds = datasetMetadataFromQuery(dataset_id=datasetIds, ids_only=True, public_only=True)
+
+    # Write to file
+    filepath = '/tmp/s4m_zipfile_%s.zip' % randString
+    with zipfile.ZipFile(filepath, 'w') as zf:
+        for datasetId in datasetIds:
+            ds = Dataset(datasetId)
+            metadata = pandas.DataFrame.from_dict(ds.metadata(), orient='index', columns=['value'])
+            metadata.index.name = 'key'
+            zf.writestr("%s_samples.tsv" % datasetId, ds.samples().to_csv(sep="\t"))
+            zf.writestr("%s_metadata.tsv" % datasetId, metadata.to_csv(sep="\t"))
+            if ds.platformType()=='Microarray':
+                zf.write(ds.expressionFilePath(key='raw'), "%s_expression_probes.tsv" % datasetId)
+                zf.write(ds.expressionFilePath(key='genes'), "%s_expression_genes.tsv" % datasetId)
+            else:
+                zf.write(ds.expressionFilePath(key='raw'), "%s_expression_counts.tsv" % datasetId)
+    return filepath
+
 
 def sampleSummaryTable():
     """Return a pandas DataFrame which summaries sample data we have in the system.
@@ -308,6 +340,7 @@ class Dataset(object):
         key is one of ["raw","genes"] for microarray and ["raw","cpm"] for RNASeq.
         Using 'genes' for RNASeq will still work, and fetch 'raw' in that case.
         Using 'cpm' for Microarray will still work, and fetch 'genes' in that case.
+        applyLog2 will apply log2(df+1) if platform_type is RNASeq and max value is greater than 100.
         """
         if self.platformType()=='RNASeq' and key=='cpm': # get raw and calculate cpm
             df = pandas.read_csv(self.expressionFilePath(key='raw'), sep="\t", index_col=0)
@@ -359,8 +392,9 @@ class Dataset(object):
 # See .env file for a full list of variables to set.
 
 def test_metadata():
-    assert datasetFromDatasetId(0) is None
-    assert datasetFromDatasetId(2000).metadata()["name"] == "Matigian_2010_20699480"
+    assert Dataset(0) is None
+    assert Dataset(2000).metadata()["name"] == "Matigian_2010_20699480"
+    print()
 
 def test_samples():
     df = datasetFromDatasetId(6003).samples()
@@ -390,11 +424,3 @@ def test_datasetMetadataVsDatasetLoadingTime():
     t1 = time.time()
     print(pandas.DataFrame.from_records([Dataset(datasetId).metadata() for datasetId in df.index]).shape, time.time()-t1)
 
-def test_samplesFromQuery():
-    print(samplesFromQuery(limit=5))
-
-def test_allValues():
-    print(allValues("samples", "sex"))
-
-def test_sampleSummaryTable():
-    print(sampleSummaryTable())

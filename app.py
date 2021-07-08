@@ -19,6 +19,7 @@ api = Api(app, errors=errors)
 # According to this https://stackoverflow.com/questions/31873989/rejecting-files-greater-than-a-certain-amount-with-flask-uploads
 # not setting this should allow any size upload, but the server returns 413 error for larger file uploads.
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
+app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
 
 if os.getenv('FLASK_ENV')!='development':
     logging.basicConfig(filename='app.log', level=logging.ERROR, format=f'%(asctime)s %(levelname)s %(name)s : %(message)s')
@@ -36,8 +37,12 @@ api.add_resource(datasets.SampleSearch, '/search/samples')
 # Get available values
 api.add_resource(datasets.Values, '/values/<collection>/<key>')
 
-# Genesets based on expression analyses
-api.add_resource(datasets.Geneset, '/geneset')
+# Download multiple datasets
+api.add_resource(datasets.Download, '/download')
+
+# Gene expression analyses
+api.add_resource(genes.SampleGroupToGenes, '/genes/sample-group-to-genes')
+api.add_resource(genes.GenesetCollection, '/genes/geneset-collection')
 
 # Atlas data
 api.add_resource(atlases.Atlas, '/atlases/<atlasType>/<item>')

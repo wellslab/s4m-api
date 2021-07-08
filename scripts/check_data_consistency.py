@@ -54,10 +54,12 @@ def checkMissingData(publicDatasetsOnly=False, atlasDatasetsOnly=False, checkSam
         for datasetId in sorted(datasetIdsFromMetadata):
             ds = datasets.Dataset(datasetId)
             sampleIdsFromMetadata = set(ds.samples().index)
-            sampleIdsFromExpression = set(ds.expressionMatrix().columns)
-            if sampleIdsFromMetadata!=sampleIdsFromExpression:
-                print("Non-matching sample ids for dataset %s" % (datasetId))
-
+            try:
+                sampleIdsFromExpression = set(ds.expressionMatrix().columns)
+                if sampleIdsFromMetadata!=sampleIdsFromExpression:
+                    print("Non-matching sample ids for dataset %s" % datasetId)
+            except FileNotFoundError:
+                print("Raw expression file not found for dataset %s" % datasetId)
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()

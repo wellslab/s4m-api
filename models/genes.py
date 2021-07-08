@@ -1,11 +1,8 @@
 """
-Main interface to gene annotation data.
-- Should no longer be needed, since we can use mygene.info.
+Main interface to gene expression data. Even though we can consider gene expression as a part of dataset,
+performing gene expression analyses across multiple datasets happens often, so it gets its own package here.
 """
 import pymongo, os, pandas
-from models.utilities import mongoClient
-
-database = mongoClient()["dataportal"]
 
 def geneset(geneIds=[], searchString="", limit=100):
     """Return a pandas DataFrame which contains attributes of genes matching the parameters.

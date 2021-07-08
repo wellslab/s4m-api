@@ -6,7 +6,8 @@ from resources import auth
 from models import datasets, genes
 from resources.errors import DatasetIdNotFoundError, DatasetIsPrivateError, DatasetGeneIdNotInExpressionError, UserNotAuthenticatedError, KeyNotFoundError
 
-_exclude_some_datasets = [5002, 6127, 6130, 6131, 6149, 6150, 6151, 6155, 6156, 6187, 6197, 6368, 6655, 6754, 6776, 6948, 7012, 7115, 7209, 7217, 7218, 7250, 7311, 7401]
+# See explanation of these under DatasetSearch class
+_exclude_some_datasets = [5002, 6056, 6127, 6130, 6131, 6149, 6150, 6151, 6155, 6156, 6187, 6197, 6368, 6370, 6612, 6655, 6754, 6776, 6948, 7012, 7115, 7209, 7217, 7218, 7250, 7311, 7401]
 
 def protectedDataset(datasetId):
     """For many classes here where we check if a dataset is private or not before proceding, this convenience function peforms
@@ -19,6 +20,10 @@ def protectedDataset(datasetId):
         return ds
     except datasets.DatasetIdNotFoundError:
         raise DatasetIdNotFoundError
+
+# ----------------------------------------------------------
+# Working on a single specified dataset
+# ----------------------------------------------------------
 
 class DatasetMetadata(Resource):
     def get(self, datasetId):
@@ -62,21 +67,6 @@ class DatasetSamples(Resource):
         else:
             return {}
 
-# class DatasetPossibleGenes(Resource):
-#     def get(self, datasetId):
-#         """Thought it may be possible to get gene ids and symbols for genes in a dataset this way.
-#         But in practise this may return a very large list which hampers performance on the website.
-#         """
-#         ds = protectedDataset(datasetId)
-#
-#         This could work if we were bringing back all gene ids, even if not found in annotation - however it will be really slow
-#         since the number of entries returned is not subset by query string.
-#         geneIds = ds.expressionMatrix(key=key).index.tolist()
-#         gs = genes.geneset(geneIds=geneIds, limit=None)
-#         gs = gs.loc[set(geneIds).intersection(gs.index)]
-#         geneSymbolFromGeneId = gs['gene_name'].to_dict()
-#         return [{'geneId':geneId, 'geneSymbol':geneSymbolFromGeneId.get(geneId, geneId)} for geneId in geneIds]
-
 class DatasetExpression(Resource):
     def get(self, datasetId):
         """Return expression table for a dataset with datasetId and gene id(s).
@@ -84,7 +74,7 @@ class DatasetExpression(Resource):
         parser = reqparse.RequestParser()
         parser.add_argument('gene_id', type=str, required=False)  # will return a list
         parser.add_argument('key', type=str, required=False, default="raw")
-        parser.add_argument('log2', type=str, required=False, default="False") # will apply numpy.log2(exp+1) if true
+        parser.add_argument('log2', type=str, required=False, default="False") # will apply numpy.log2(exp+1) if true (only to RNASeq data)
         parser.add_argument('orient', type=str, required=False, default="records")
         parser.add_argument('as_file', type=str, required=False, default="False")  
             # - if set to boolean, any string is parsed as true
@@ -134,6 +124,10 @@ class DatasetPca(Resource):
         return {'coordinates': coords.to_dict(orient=args.get('orient')), 
                 'attributes': attributes.to_dict(orient=args.get('orient'))}
 
+# ----------------------------------------------------------
+# Working on groups of datasets - searching, fetching values
+# ----------------------------------------------------------
+
 class DatasetSearch(Resource):
     def get(self):
         """Return matching dataset + sample info based on query.
@@ -156,10 +150,11 @@ class DatasetSearch(Resource):
         parser.add_argument('dataset_id', type=str, required=False) # comma separated list of dataset ids
         parser.add_argument('query_string', type=str, required=False) # arbitrary query string - will perform text search
 
-        # specific fields found in datasets
+        # specific fields found in datasets and samples
         parser.add_argument('platform_type', type=str, required=False)
         parser.add_argument('projects', type=str, required=False)
         parser.add_argument('name', type=str, required=False)  # fetch dataset by name
+        parser.add_argument('organism', type=str, required=False, default="homo sapiens")  # use 'all' to fetch all organisms
 
         # output control
         parser.add_argument('format', type=str, required=False)  # ['sunburst1','sunburst2']
@@ -188,6 +183,7 @@ class DatasetSearch(Resource):
                                                query_string=args.get("query_string"),
                                                platform_type=args.get("platform_type"),
                                                projects=args.get("projects"),
+                                               organism=args.get("organism"),
                                                limit=args.get("limit"),
                                                public_only=publicOnly,
                                                include_samples_query=args.get("include_samples_query").lower().startswith('t'))
@@ -274,12 +270,14 @@ class SampleSearch(Resource):
         parser.add_argument('limit', type=int, required=False, default=50)
         parser.add_argument('orient', type=str, required=False, default='records')
         parser.add_argument('exclude_some_datasets', type=str, required=False, default="True")
+        parser.add_argument('organism', type=str, required=False, default="homo sapiens")  # use 'all' to fetch all organisms
         args = parser.parse_args()
 
         publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
         df = datasets.datasetMetadataFromQuery(dataset_id=args.get("dataset_id").split(',') if args.get('dataset_id') is not None else [],
                                                query_string=args.get("query_string"),
                                                limit=args.get("limit"),
+                                               organism=args.get("organism"),                                               
                                                public_only=publicOnly)
         if not args.get('exclude_some_datasets').lower().startswith('f'):
             df = df.loc[[index for index in df.index if index not in _exclude_some_datasets]]
@@ -295,13 +293,13 @@ class SampleSearch(Resource):
 
         return samples.fillna("").to_dict(orient=args.get('orient'))
 
-
 class Values(Resource):
     def get(self, collection, key):
         """Return all values for a key (=field) in the datasets collection.
         """
         parser = reqparse.RequestParser()
         parser.add_argument('include_count', type=str, required=False, default="false")
+        parser.add_argument('organism', type=str, required=False, default="homo sapiens")  # use 'all' to fetch all organisms
         args = parser.parse_args()
 
         if collection not in ['datasets','samples']:
@@ -309,19 +307,34 @@ class Values(Resource):
 
         publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
         if args.get('include_count').lower().startswith('t'):
-            values = datasets.allValues(collection, key, includeCount=True, public_only=publicOnly, excludeDatasets=_exclude_some_datasets)
+            values = datasets.allValues(collection, key, includeCount=True, public_only=publicOnly, 
+                                        excludeDatasets=_exclude_some_datasets, organism=args.get('organism'))
             if values is None:
                 raise KeyNotFoundError
             else:
                 return values.to_dict() 
         else:
-            values = datasets.allValues(collection, key, public_only=publicOnly, excludeDatasets=_exclude_some_datasets)
+            values = datasets.allValues(collection, key, public_only=publicOnly, 
+                                        excludeDatasets=_exclude_some_datasets,organism=args.get('organism'))
             if values is None:
                 raise KeyNotFoundError
             else:
                 return sorted(values)
-
-class Geneset(Resource):
+        
+class Download(Resource):
     def get(self):
-        df = pandas.read_csv(os.path.join(os.environ["EXPRESSION_FILEPATH"], "../received/jarny/DiffGenes-cell_type-monocyte.tsv"), sep="\t", index_col=0)
-        return df.reset_index().to_dict(orient="records")
+        """Return all dataset files as one zip file.
+        """
+        parser = reqparse.RequestParser()
+        parser.add_argument('dataset_id', type=str, required=True) # comma separated list of dataset ids
+        parser.add_argument('exclude_some_datasets', type=str, required=False, default="True")
+        parser.add_argument('sep', type=str, required=False, default="\t")  # separator to use for each file
+        args = parser.parse_args()
+
+        publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
+        datasetIds = map(int, args.get('dataset_id').split(','))
+        if not args.get('exclude_some_datasets').lower().startswith('f'):
+            datasetIds = [id for id in datasetIds if id not in _exclude_some_datasets]
+        filepath = datasets.dataAsZipfile(datasetIds, publicOnly=publicOnly)
+        filename = "Stemformatics_downloaded_datasets.zip"
+        return send_from_directory(os.path.dirname(filepath), os.path.basename(filepath), as_attachment=True, attachment_filename=filename)

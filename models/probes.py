@@ -73,19 +73,27 @@ def probeMappingFilepath(**kwargs):
         platform = datasets.Dataset(datasetId).metadata()['platform']
         # First we just try some pre-defined matches
         platformRep = {'Affymetrix Human Genome U133 Plus 2.0 Array [HG-U133_Plus_2]':{'manufacturer':'Affymetrix', 'platform':'HG-U133_2'},
-                       'Illumina HumanHT-12 v4.0 Expression BeadChip':{'manufacturer':'Illumina', 'platform':'HumanHT-12', 'version':'V4'},
                        'Affymetrix Human Exon 1.0 ST Array [transcript (gene) version] [HuEx-1_0-st]':{'manufacturer':'Affymetrix', 'platform':'HuEx-1_0-ST', 'version':'V2'},
+                       'Affymetrix Human Exon 1.0 ST Array [probe set (exon) version] [HuEx-1_0-st]':{'manufacturer':'Affymetrix', 'platform':'HuEx-1_0-ST',},
+                       'Affymetrix HT Human Genome U133A Array [HT_HG-U133A]':{'manufacturer':'Affymetrix', 'platform':'HT-HG-U133A',},
+                       'Affymetrix Human Genome U133A Array [HG-U133A]':{'manufacturer':'Affymetrix', 'platform':'HG-U133A',},
+                       'Affymetrix Mouse Gene 2.0 ST Array [transcript (gene) version] [MoGene-2_0-st]':{'manufacturer':'Affymetrix', 'platform':'MoGene-2_0-ST',},
+                       'Illumina HumanHT-12 v4.0 Expression BeadChip':{'manufacturer':'Illumina', 'platform':'HumanHT-12', 'version':'V4'},
                        'Illumina MouseRef-8 v2.0 Expression BeadChip':{'manufacturer':'Illumina', 'platform':'MouseRef-8', 'version':'V2'},
-                       'Agilent-014850 Whole Human Genome Microarray 4x44K G4112F':{'manufacturer':'Agilent', 'platform':'4x44 014850 G4112F'},
                        'Illumina Human-6 v2.0 Expression BeadChip':{'manufacturer':'Illumina', 'platform':'HumanWG-6', 'version':'V2'},
                        'Illumina HumanRef-8 v2.0 Expression BeadChip':{'manufacturer':'Illumina', 'platform':'HumanRef-8', 'version':'V2'},
-                       'Affymetrix HT Human Genome U133A Array [HT_HG-U133A]':{'manufacturer':'Affymetrix', 'platform':'HT-HG-U133A',},
+                       'Illumina HumanRef-8 v3.0 Expression BeadChip':{'manufacturer':'Illumina', 'platform':'HumanRef-8', 'version':'V3'},
+                       'Illumina HumanWG-6 v3.0 Expression BeadChip':{'manufacturer':'Illumina', 'platform':'HumanWG-6', 'version':'V3'},
+                       'Agilent-014850 Whole Human Genome Microarray 4x44K G4112F':{'manufacturer':'Agilent', 'platform':'4x44 014850 G4112F'},
+                       'Agilent-028004 SurePrint G3 Human GE 8x60K Microarray':{'manufacturer':'Agilent', 'platform':'SurePrint G3 Human GE v3 8x60K 072363', 'version':'V3'},
                       }
-        #print(platform)
+        print(platform)
         if platform in platformRep:
             subset = df[(df['manufacturer']==platformRep[platform]['manufacturer']) & (df['platform']==platformRep[platform]['platform'])]
             if 'version' in platformRep[platform]:
                 subset = subset[subset['version']==platformRep[platform]['version']]
+            if len(subset)>1 and 'version' not in platformRep[platform]:  # try version=nan
+                subset = subset[pandas.isnull(subset['version'])]
             return _filepathFromSubset(subset)
 
         platform = platform.lower()  # lowercase version for easier pattern matching
