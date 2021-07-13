@@ -29,5 +29,6 @@ conda install flask-cors
 conda install pyjwt
 conda install flask-bcrypt
 conda install scp
+conda install requests
 
 nohup waitress-serve --port=5000 app:app > app.log 2>&1 &

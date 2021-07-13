@@ -342,7 +342,7 @@ class Dataset(object):
         Using 'cpm' for Microarray will still work, and fetch 'genes' in that case.
         applyLog2 will apply log2(df+1) if platform_type is RNASeq and max value is greater than 100.
         """
-        if self.platformType()=='RNASeq' and key=='cpm': # get raw and calculate cpm
+        if 'RNASeq' in self.platformType() and key=='cpm': # get raw and calculate cpm
             df = pandas.read_csv(self.expressionFilePath(key='raw'), sep="\t", index_col=0)
             df = cpm(df)
         elif self.platformType()=='Microarray' and key=='cpm':
@@ -350,7 +350,7 @@ class Dataset(object):
         else:
             df = pandas.read_csv(self.expressionFilePath(key=key), sep="\t", index_col=0)
 
-        if applyLog2 and self.platformType()=='RNASeq' and df.max().max()>100: # 
+        if applyLog2 and 'RNASeq' in self.platformType() and df.max().max()>100: # 
             df = numpy.log2(df+1)
 
         return df

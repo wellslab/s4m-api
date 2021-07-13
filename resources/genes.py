@@ -4,7 +4,7 @@ Gene expression analysis related resources here.
 from flask_restful import reqparse, Resource
 import os, pandas
 from models import genes, datasets
-from resources.datasets import DatasetSearch
+from resources.datasets import protectedDataset, DatasetSearch
 
 # def geneSymbolsFromGeneIds(geneIds):
 #     headers = {'content-type': 'application/x-www-form-urlencoded'}
@@ -99,30 +99,82 @@ class SampleGroupToGenes(Resource):
 
 class GenesetCollection(Resource):
     def get(self):
-        df = pandas.read_csv(os.path.join(os.environ["EXPRESSION_FILEPATH"], "../received/jarny/DiffGenes-cell_type-monocyte.tsv"), sep="\t", index_col=0)
-        return df.reset_index().to_dict(orient="records")
-
-class Geneset(Resource):
-    def get(self):
-        """Return attibutes of genes from query parameters. The returned dictionary looks like
-            [
-                {
-                    "gene_id": "ENSG00000133055",
-                    "gene_name": "MYBPH",
-                    "gene_description": "myosin binding protein H [Source:HGNC Symbol;Acc:HGNC:7552]"
-                },
-                ...
-            ]
-        """
         parser = reqparse.RequestParser()
-        parser.add_argument('gene_id', type=str, required=False, default="", action="append")  # list of strings
-        parser.add_argument('search_string', type=str, required=False, default="")
-        parser.add_argument('limit', type=int, required=False, default=50, action="append")
-        parser.add_argument('orient', type=str, required=False, default="records")
+        parser.add_argument('name', type=str, required=False)
+        parser.add_argument('dataset_id', type=int, required=False)
+        parser.add_argument('sample_group', type=int, required=False, default='cell_type')
         args = parser.parse_args()
+
+        if args.get('name') is None: # return a list of current geneset names
+            return genes.allGenesets()
+        elif args.get('dataset_id') is None: # return dataset ids for named geneset
+            return genes.genesetFromName(args.get('name'))
+        else:   # return details about particular geneset and dataset combo
+            geneset = genes.genesetFromName(args.get('name'))
+            #geneIds = list(geneset['geneSymbolsFromId'].keys())
+            ds = protectedDataset(args.get('dataset_id'))
+            exp = ds.expressionMatrix(key='cpm', applyLog2=True)
+
+            # Now we subset exp on geneset. There may be multiple gene symbols per gene id, 
+            # but we just choose the one with most variance
+            selectedGeneIds, selectedGeneSymbols = [], []
+            for geneSymbol,geneIds in geneset['geneIdsFromSymbol'].items():
+                df = exp.loc[exp.index.intersection(geneIds)]
+                if len(df)>0:
+                    selectedGeneIds.append(df.var(axis=1).sort_values().index[-1])
+                    selectedGeneSymbols.append(geneSymbol)
+
+            df = exp.loc[selectedGeneIds]
+            samples = ds.samples().fillna('')
+
+            from scipy.stats import zscore
+            zscores = pandas.DataFrame([zscore(df.loc[rowId]) for rowId in df.index], index=df.index, columns=df.columns)
+
+            # cluster rows and columns based on zscore
+            from scipy.spatial.distance import pdist, squareform
+            import scipy.cluster.hierarchy as hc
+
+            rowDist = squareform(pdist(zscores.to_numpy()))
+            rowOrdering = hc.leaves_list(hc.linkage(rowDist, method='centroid'))
+
+            colDist = squareform(pdist(zscores.transpose().to_numpy()))
+            colOrdering = hc.leaves_list(hc.linkage(colDist, method='centroid'))
+
+            zscores = zscores.iloc[rowOrdering, colOrdering]
+
+            # Relabel columns to 'xxx_1','xxx_2', etc, where xxx is the sample group item
+            sampleGroupItems = samples.loc[zscores.columns][args.get('sample_group')]
+            uniqueItems = dict([(item,[]) for item in sampleGroupItems.unique()])
+            columns = []
+            for item in sampleGroupItems:
+                columns.append("%s_%s" % (item, len(uniqueItems[item])))
+                uniqueItems[item].append(item)
+            zscores.columns = columns
+            zscores.index = selectedGeneSymbols
+            return zscores.to_dict(orient='split')
+
+
+# class Geneset(Resource):
+#     def get(self):
+#         """Return attibutes of genes from query parameters. The returned dictionary looks like
+#             [
+#                 {
+#                     "gene_id": "ENSG00000133055",
+#                     "gene_name": "MYBPH",
+#                     "gene_description": "myosin binding protein H [Source:HGNC Symbol;Acc:HGNC:7552]"
+#                 },
+#                 ...
+#             ]
+#         """
+#         parser = reqparse.RequestParser()
+#         parser.add_argument('gene_id', type=str, required=False, default="", action="append")  # list of strings
+#         parser.add_argument('search_string', type=str, required=False, default="")
+#         parser.add_argument('limit', type=int, required=False, default=50, action="append")
+#         parser.add_argument('orient', type=str, required=False, default="records")
+#         args = parser.parse_args()
         
-        df = genes.geneset(geneIds=args.get("gene_id"), searchString=args.get("search_string"), limit=args.get("limit"))
-        if args.get('orient')=='records':
-            df = df.reset_index()
-        return df.fillna("").to_dict(orient=args.get("orient"))
+#         df = genes.geneset(geneIds=args.get("gene_id"), searchString=args.get("search_string"), limit=args.get("limit"))
+#         if args.get('orient')=='records':
+#             df = df.reset_index()
+#         return df.fillna("").to_dict(orient=args.get("orient"))
 

@@ -7,7 +7,7 @@ from models import datasets, genes
 from resources.errors import DatasetIdNotFoundError, DatasetIsPrivateError, DatasetGeneIdNotInExpressionError, UserNotAuthenticatedError, KeyNotFoundError
 
 # See explanation of these under DatasetSearch class
-_exclude_some_datasets = [5002, 6056, 6127, 6130, 6131, 6149, 6150, 6151, 6155, 6156, 6187, 6197, 6368, 6370, 6612, 6655, 6754, 6776, 6948, 7012, 7115, 7209, 7217, 7218, 7250, 7311, 7401]
+_exclude_some_datasets = [5002, 6056, 6127, 6130, 6131, 6149, 6150, 6151, 6155, 6156, 6187, 6197, 6368, 6370, 6612, 6655, 6701, 6754, 6776, 6948, 7012, 7115, 7209, 7217, 7218, 7250, 7311, 7401]
 
 def protectedDataset(datasetId):
     """For many classes here where we check if a dataset is private or not before proceding, this convenience function peforms
