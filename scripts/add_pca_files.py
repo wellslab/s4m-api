@@ -33,9 +33,14 @@ def createPCAFiles(datasetId):
     """
     os.chdir(expressionFilepath)
     df = pandas.read_csv(os.path.join(datasetId, "%s.raw.tsv" % datasetId), sep="\t", index_col=0)
-    print(datasetId, df.shape, df.max().max())
-    if df.max().max()>100: # log this first
+    min = df.min().min()
+    print(datasetId, df.shape, min, df.max().max(), min==-numpy.Inf)
+    if min==-numpy.Inf:  # assume this was logged without adding 1, so reverse the log and +1 log again
+        df = numpy.log2(numpy.power(2, df)+1)
+    elif df.max().max()>100: # log this first
         df = numpy.log2(df+1)
+    min = df.min().min()
+    df = df.fillna(min)
 
     # Auto select components using this. From docs (https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.PCA.html):
     # If 0 < n_components < 1 and svd_solver == 'full', select the number of components such that the

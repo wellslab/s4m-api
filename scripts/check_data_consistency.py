@@ -57,9 +57,9 @@ def checkMissingData(publicDatasetsOnly=False, atlasDatasetsOnly=False, checkSam
             try:
                 sampleIdsFromExpression = set(ds.expressionMatrix().columns)
                 if sampleIdsFromMetadata!=sampleIdsFromExpression:
-                    print("Non-matching sample ids for dataset %s" % datasetId)
+                    print("Non-matching sample ids for dataset %s (%s)" % (datasetId, ds.samples()['organism'].unique()))
             except FileNotFoundError:
-                print("Raw expression file not found for dataset %s" % datasetId)
+                print("Raw expression file not found for dataset %s (%s)" % (datasetId, ds.samples()['organism'].unique()))
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()

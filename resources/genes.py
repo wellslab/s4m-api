@@ -97,6 +97,50 @@ class SampleGroupToGenes(Resource):
             df = df.reset_index()
         return {'sampleGroup':sampleGroup, 'sampleGroupItem':sampleGroupItem, 'rankScore':df.to_dict(orient=args.get('orient')), 'totalDatasets':len(uniqueDatasetIds)}
 
+class GeneToSampleGroups(Resource):
+    def get(self):
+        """Returns highly expressed genes in sampleGroup = sampleGroupItem. Returned object is a pandas DataFrame
+        which contains scores and dataset ids.
+        Bulk of this code should be in the model, but it's easier to filter out dataset we don't want to look at
+        by using DatasetSearch class from resources for now. Once these filters don't need to be applied, we can move
+        this code into models.
+        """
+        parser = reqparse.RequestParser()
+        parser.add_argument('gene_id', type=str, required=True)
+        args = parser.parse_args()
+        
+        allDatasets = DatasetSearch().get()
+        geneId = args.get('gene_id')
+        sampleGroup = 'cell_type'  # perhaps turn this into a parameter later
+        result = pandas.DataFrame(columns=[sampleGroup, 'datasetIds', 'var', 'ranks']).set_index(sampleGroup)  # result to fill in
+        for datasetDict in allDatasets:
+            ds = datasets.Dataset(datasetDict['dataset_id'])
+            exp = ds.expressionMatrix(key='cpm', applyLog2=True)
+            if geneId not in exp.index:
+                continue
+
+            samples = ds.samples()
+            samples = samples.loc[samples.index.intersection(exp.columns)]
+            if len(samples)<4: # we need at least 2 replicates in each cell type
+                continue
+            elif len(samples[sampleGroup].unique())<2:  # we need at least 2 different cell types
+                continue
+
+            # Find mean of gene expression across cell types
+            values = exp.loc[geneId, samples.index]
+            mean = values.groupby(samples[sampleGroup]).mean().round()
+            rank = mean.rank()
+            for celltype,value in rank.items():
+                if celltype not in result:
+                    result.loc[celltype] = [[], 0, []]
+                result.loc[celltype,'datasetIds'].append(ds.datasetId)
+                result.loc[celltype,'ranks'].append(value)
+                result.loc[celltype,'var'] = mean.var()
+
+            if len(result)>30: break
+        result.to_csv('%s.tsv' % geneId, sep='\t')
+        return result.reset_index().to_dict(orient='records')          
+
 class GenesetCollection(Resource):
     def get(self):
         parser = reqparse.RequestParser()
@@ -128,7 +172,7 @@ class GenesetCollection(Resource):
             samples = ds.samples().fillna('')
 
             from scipy.stats import zscore
-            zscores = pandas.DataFrame([zscore(df.loc[rowId]) for rowId in df.index], index=df.index, columns=df.columns)
+            zscores = pandas.DataFrame([zscore(df.loc[rowId]) for rowId in df.index], index=df.index, columns=df.columns).fillna(0)
 
             # cluster rows and columns based on zscore
             from scipy.spatial.distance import pdist, squareform

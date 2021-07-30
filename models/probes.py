@@ -78,12 +78,15 @@ def probeMappingFilepath(**kwargs):
                        'Affymetrix HT Human Genome U133A Array [HT_HG-U133A]':{'manufacturer':'Affymetrix', 'platform':'HT-HG-U133A',},
                        'Affymetrix Human Genome U133A Array [HG-U133A]':{'manufacturer':'Affymetrix', 'platform':'HG-U133A',},
                        'Affymetrix Mouse Gene 2.0 ST Array [transcript (gene) version] [MoGene-2_0-st]':{'manufacturer':'Affymetrix', 'platform':'MoGene-2_0-ST',},
+                       'Affymetrix Clariom S Human GPL23159':{'manufacturer':'Affymetrix', 'platform':'Clariom_S_Human'},
                        'Illumina HumanHT-12 v4.0 Expression BeadChip':{'manufacturer':'Illumina', 'platform':'HumanHT-12', 'version':'V4'},
                        'Illumina MouseRef-8 v2.0 Expression BeadChip':{'manufacturer':'Illumina', 'platform':'MouseRef-8', 'version':'V2'},
                        'Illumina Human-6 v2.0 Expression BeadChip':{'manufacturer':'Illumina', 'platform':'HumanWG-6', 'version':'V2'},
                        'Illumina HumanRef-8 v2.0 Expression BeadChip':{'manufacturer':'Illumina', 'platform':'HumanRef-8', 'version':'V2'},
                        'Illumina HumanRef-8 v3.0 Expression BeadChip':{'manufacturer':'Illumina', 'platform':'HumanRef-8', 'version':'V3'},
+                       'Illumina HumanRef-8 V3 (GPL6883 and A-MEXP-1172)':{'manufacturer':'Illumina', 'platform':'HumanRef-8', 'version':'V3'},
                        'Illumina HumanWG-6 v3.0 Expression BeadChip':{'manufacturer':'Illumina', 'platform':'HumanWG-6', 'version':'V3'},
+                       'Illumina HumanHT-12 V4':{'manufacturer':'Illumina', 'platform':'HumanHT-12', 'version':'V4'}, # two possible matches here - this one produces more matches
                        'Agilent-014850 Whole Human Genome Microarray 4x44K G4112F':{'manufacturer':'Agilent', 'platform':'4x44 014850 G4112F'},
                        'Agilent-028004 SurePrint G3 Human GE 8x60K Microarray':{'manufacturer':'Agilent', 'platform':'SurePrint G3 Human GE v3 8x60K 072363', 'version':'V3'},
                       }

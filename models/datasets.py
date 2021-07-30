@@ -1,16 +1,37 @@
 """
 Main interface to stemformatics data. Dataset class defined here handles most interactions with underlying
-data, including sample tables and expression matrix files. Atlas data are handled separately in the atlas.py.
+data, including sample tables and expression matrices. Atlas data are handled separately in the atlas.py.
 
 Note that model here does not enforce rules on private and public datasets, hence it's up to the controller
 to ensure that correct parameter is used to call the functions here, if trying to ensure only public datasets
 are returned, for example.
+
+The following datasets had expression files but no metadata, which means they're likely to be irrelevant
+for the new system (it implies that we copied the expression files across from various sources but there was
+no entry for them in the old sql tables). But we keep a record of them here to examine later. When we converted
+the expression from text files to anndata objects, these were not included, so their expression values are
+only held in text files.
+[5010, 5037, 6031, 6054, 6060, 6097, 6105, 6121, 6159, 6165, 6191, 6192, 6204, 6209, 6211, 6212, 6214, 6215, 
+ 6217, 6219, 6220, 6234, 6235, 6240, 6241, 6243, 6246, 6256, 6257, 6259, 6262, 6294, 6299, 6301, 6304, 6305, 
+ 6312, 6314, 6330, 6333, 6341, 6352, 6356, 6361, 6365, 6372, 6374, 6384, 6387, 6397, 6400, 6401, 6415, 6418, 
+ 6419, 6421, 6422, 6423, 6424, 6425, 6426, 6427, 6428, 6437, 6441, 6442, 6460, 6464, 6469, 6472, 6488, 6493, 
+ 6494, 6504, 6508, 6510, 6511, 6519, 6520, 6524, 6525, 6535, 6537, 6538, 6539, 6547, 6548, 6549, 6550, 6551, 
+ 6553, 6554, 6563, 6564, 6568, 6581, 6586, 6587, 6595, 6616, 6626, 6630, 6636, 6640, 6645, 6647, 6648, 6650, 
+ 6651, 6667, 6668, 6681, 6689, 6690, 6691, 6692, 6697, 6707, 6709, 6720, 6722, 6726, 6728, 6738, 6739, 6743, 
+ 6744, 6759, 6800, 6803, 6833, 6840, 6841, 6856, 6888, 6962, 6964, 6985, 7012, 7069, 7070, 7097, 7110, 7156, 
+ 7157, 7190, 7255, 7257, 7285, 7286, 7292, 7327, 7346, 7377]
+
 """
 import pymongo, os, pandas, numpy
 from models.utilities import mongoClient
 from models.atlases import Atlas
 
 database = mongoClient()["dataportal"]
+
+# These datasets have entries in the metadata table but are not ready to be exposed to the public - such as 6131, 
+# which is not in the normal format. Hence by default, datasetMetadataFromQuery() function here 
+# will exclude this hard coded list of datasets. You can still access these by using Dataset() initialiser.
+_exclude_list = [5002, 6127, 6130, 6131, 6149, 6150, 6151, 6155, 6187, 6197, 6368, 6655, 6754, 6776, 6948, 7012, 7115, 7209, 7217, 7218, 7250, 7311, 7401]
 
 # ----------------------------------------------------------
 # Functions
@@ -24,8 +45,11 @@ def datasetMetadataFromQuery(**kwargs):
     """Return DataFrame of dataset metadata which match a query. Rows will have dataset ids,
     while columns will be attributes of dataset metadata. Use this instead of Dataset instance
     for fetching large numbers of datasets.
+
     If ids_only=True, only a list of dataset ids will be returned, instead of a DataFrame.
     Note that query_string will search samples collection as well if include_samples_query=true.
+
+    Use datasetMetadataFromQuery() to fetch all datasets.
     """
     limit = kwargs.get("limit")
     ids_only = kwargs.get('ids_only', False)
@@ -41,7 +65,8 @@ def datasetMetadataFromQuery(**kwargs):
     organism = kwargs.get("organism")
     status = kwargs.get("status")
     
-    params = {}
+    # params for find function (ie. fetch all records matching params) and attributes for what to return
+    params = {'dataset_id': {"$nin": _exclude_list}}
     attributes = {"dataset_id":1, "_id":0} if ids_only==True else {"_id":0}
 
     if public_only:
@@ -65,7 +90,7 @@ def datasetMetadataFromQuery(**kwargs):
         datasetIds = [int(item) for item in dataset_id]
     
     if len(datasetIds)>0:
-        params['dataset_id'] = {"$in": datasetIds}
+        params['dataset_id']["$in"] = datasetIds
 
     if platform_type:
         params['platform_type'] = platform_type
@@ -80,7 +105,7 @@ def datasetMetadataFromQuery(**kwargs):
         params["name"] = name
     if query_string and not include_samples_query:  # otherwise it's been done already above
         params['$text'] = {"$search": query_string}
-
+    
     if limit:
         cursor = database["datasets"].find(params, attributes).limit(limit)
     else:
@@ -394,19 +419,18 @@ class Dataset(object):
 def test_metadata():
     assert Dataset(0) is None
     assert Dataset(2000).metadata()["name"] == "Matigian_2010_20699480"
-    print()
 
 def test_samples():
-    df = datasetFromDatasetId(6003).samples()
+    df = Dataset(6003).samples()
     assert df.shape==(9,21)
     assert df.at["6003_GSM396481", "cell_type"] == "hESC-derived monocyte"
 
 def test_datasetMetadataFromQuery():
+    datasetIds = datasetMetadataFromQuery(dataset_id=[2000,_exclude_list[0]], ids_only=True)
+    assert datasetIds==[2000]
     df = datasetMetadataFromQuery()
-    print(df.shape)
-    df['projects'] = ['atlas' if len(item)>0 else '' for item in df['projects']]
-    #df = df[df['projects']!='']
-    #print(df.shape)
+    assert len(set(_exclude_list).intersection(set(df.index)))==0
+    return
     s = df.groupby('platform_type').size()
     for key,val in s.items():
         print('{platform_type:%s, number_of_datasets:%s}' % (key,val))

@@ -42,7 +42,8 @@ api.add_resource(datasets.Download, '/download')
 
 # Gene expression analyses
 api.add_resource(genes.SampleGroupToGenes, '/genes/sample-group-to-genes')
-api.add_resource(genes.GenesetCollection, '/genes/geneset-collection')
+api.add_resource(genes.GeneToSampleGroups, '/genes/gene-to-sample-groups')
+#api.add_resource(genes.GenesetCollection, '/genes/geneset-collection')
 
 # Atlas data
 api.add_resource(atlases.Atlas, '/atlases/<atlasType>/<item>')

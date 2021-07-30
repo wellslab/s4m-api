@@ -6,9 +6,6 @@ from resources import auth
 from models import datasets, genes
 from resources.errors import DatasetIdNotFoundError, DatasetIsPrivateError, DatasetGeneIdNotInExpressionError, UserNotAuthenticatedError, KeyNotFoundError
 
-# See explanation of these under DatasetSearch class
-_exclude_some_datasets = [5002, 6056, 6127, 6130, 6131, 6149, 6150, 6151, 6155, 6156, 6187, 6197, 6368, 6370, 6612, 6655, 6701, 6754, 6776, 6948, 7012, 7115, 7209, 7217, 7218, 7250, 7311, 7401]
-
 def protectedDataset(datasetId):
     """For many classes here where we check if a dataset is private or not before proceding, this convenience function peforms
     the taks and returns the datasets.Dataset instance.
@@ -72,10 +69,10 @@ class DatasetExpression(Resource):
         """Return expression table for a dataset with datasetId and gene id(s).
         """
         parser = reqparse.RequestParser()
-        parser.add_argument('gene_id', type=str, required=False)  # will return a list
-        parser.add_argument('key', type=str, required=False, default="raw")
+        parser.add_argument('gene_id', type=str, required=False)  # Ensembl ids. May be a comma separated list
+        parser.add_argument('key', type=str, required=False, default="raw") # ['raw','genes','cpm']
         parser.add_argument('log2', type=str, required=False, default="False") # will apply numpy.log2(exp+1) if true (only to RNASeq data)
-        parser.add_argument('orient', type=str, required=False, default="records")
+        parser.add_argument('orient', type=str, required=False, default="records")  # from pandas
         parser.add_argument('as_file', type=str, required=False, default="False")  
             # - if set to boolean, any string is parsed as true
         args = parser.parse_args()
@@ -96,7 +93,10 @@ class DatasetExpression(Resource):
                 return send_from_directory(os.path.dirname(filepath), os.path.basename(filepath), as_attachment=True, attachment_filename=filename)
         else:
             geneIds = args.get('gene_id').split(',') if args.get('gene_id') is not None else []
-            df = ds.expressionMatrix(key=args.get('key'), applyLog2=args.get('log2').lower().startswith('t')).loc[geneIds]
+            df = ds.expressionMatrix(key=args.get('key'), applyLog2=args.get('log2').lower().startswith('t'))
+            geneIds = df.index.intersection(geneIds)
+            df = df.loc[geneIds]
+            
             if args.get('orient')=='records':
                 df = df.reset_index()
             if len(df)>0:
@@ -134,10 +134,6 @@ class DatasetSearch(Resource):
         Note that in the current implementation, if none of the parameters have been specified or other parameters
         not recognised here have been specified, this will fetch data for all datasets.
 
-        Some datasets are not ready to be exposed to the public - such as 6131, which is not in the normal format.
-        Hence by default, exclude_some_datasets is set to true by default and will exclude this hard coded list of datasets
-        here. Set this to 'f' or 'false' to include these datasets in this search results.
-
         Note that multiple parameters work with "AND" operator, so that platform_type=Microarray&projects=dc_atlas will
         only fetch datasets with both of these conditions satisfied - same applies for specific dataset ids supplied
         through the dataset_id parameter. The only exception to this is when query_string and include_samples_query are
@@ -161,7 +157,6 @@ class DatasetSearch(Resource):
         parser.add_argument('limit', type=int, required=False)  # limit the total number of search results
 
         # filtering
-        parser.add_argument('exclude_some_datasets', type=str, required=False, default="True")
         parser.add_argument('include_samples_query', type=str, required=False, default="False")
         parser.add_argument('filter_Project', type=str, required=False)
         parser.add_argument('filter_platform_type', type=str, required=False)
@@ -187,8 +182,6 @@ class DatasetSearch(Resource):
                                                limit=args.get("limit"),
                                                public_only=publicOnly,
                                                include_samples_query=args.get("include_samples_query").lower().startswith('t'))
-        if not args.get('exclude_some_datasets').lower().startswith('f'):
-            df = df.loc[[index for index in df.index if index not in _exclude_some_datasets]]
         samples = datasets.samplesFromDatasetIds(df.index.tolist())
 
         if args.get('format')=='sunburst1':  # Returns sunburst plot data, rather than dataset + samples data
@@ -269,7 +262,6 @@ class SampleSearch(Resource):
         parser.add_argument('field', type=str, required=False, default='')  # comma separated list of fields to include
         parser.add_argument('limit', type=int, required=False, default=50)
         parser.add_argument('orient', type=str, required=False, default='records')
-        parser.add_argument('exclude_some_datasets', type=str, required=False, default="True")
         parser.add_argument('organism', type=str, required=False, default="homo sapiens")  # use 'all' to fetch all organisms
         args = parser.parse_args()
 
@@ -279,8 +271,6 @@ class SampleSearch(Resource):
                                                limit=args.get("limit"),
                                                organism=args.get("organism"),                                               
                                                public_only=publicOnly)
-        if not args.get('exclude_some_datasets').lower().startswith('f'):
-            df = df.loc[[index for index in df.index if index not in _exclude_some_datasets]]
         samples = datasets.samplesFromDatasetIds(df.index.tolist())
 
         # subset columns of samples if specified
@@ -334,7 +324,7 @@ class Download(Resource):
         publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
         datasetIds = map(int, args.get('dataset_id').split(','))
         if not args.get('exclude_some_datasets').lower().startswith('f'):
-            datasetIds = [id for id in datasetIds if id not in _exclude_some_datasets]
+            datasetIds = [id for id in datasetIds if id not in datasets._exclude_list]
         filepath = datasets.dataAsZipfile(datasetIds, publicOnly=publicOnly)
         filename = "Stemformatics_downloaded_datasets.zip"
         return send_from_directory(os.path.dirname(filepath), os.path.basename(filepath), as_attachment=True, attachment_filename=filename)
