@@ -4,7 +4,8 @@ import os, pandas
 
 from resources import auth
 from models import datasets, genes
-from resources.errors import DatasetIdNotFoundError, DatasetIsPrivateError, DatasetGeneIdNotInExpressionError, UserNotAuthenticatedError, KeyNotFoundError
+from resources.errors import DatasetIdNotFoundError, DatasetIsPrivateError, DatasetGeneIdNotInExpressionError,\
+    GeneIdNotFoundError, UserNotAuthenticatedError, KeyNotFoundError
 
 def protectedDataset(datasetId):
     """For many classes here where we check if a dataset is private or not before proceding, this convenience function peforms
@@ -123,6 +124,21 @@ class DatasetPca(Resource):
 
         return {'coordinates': coords.to_dict(orient=args.get('orient')), 
                 'attributes': attributes.to_dict(orient=args.get('orient'))}
+
+class DatasetCorrelatedGenes(Resource):
+    def get(self, datasetId):
+        """Return correlation data for a dataset with datasetId and gene with geneId.
+        """
+        parser = reqparse.RequestParser()
+        parser.add_argument('gene_id', type=str, required=True)
+        parser.add_argument('cutoff', type=int, required=False, default=100)
+        args = parser.parse_args()
+
+        ds = protectedDataset(datasetId)
+        result = ds.correlatedGenes(args.get('gene_id'))
+        if result is None:
+            raise GeneIdNotFoundError
+        return result.to_dict()
 
 # ----------------------------------------------------------
 # Working on groups of datasets - searching, fetching values

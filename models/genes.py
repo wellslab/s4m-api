@@ -33,10 +33,11 @@ def sampleGroupToGenes(sampleGroup, sampleGroupItem, public_only=True, cutoff=10
         samples = ds.samples()
 
         # ignore dataset if sampleGroupItem isn't found or there's only one sampleGroupItem
-        if sampleGroupItem not in samples[sampleGroup] or len(samples[sampleGroup].unique())==1:
-            continue
+        if sampleGroupItem not in samples[sampleGroup].tolist() or len(samples[sampleGroup].unique())==1 or\
+            not ds.platformType() in ['Microarray','RNASeq']: continue
                 
         exp = ds.expressionMatrix(key='cpm', applyLog2=True)
+        if exp.index[0].startswith('ENSMUSG'): continue
         exp = exp[samples.index]
         
         # Calculate the difference between mean of sampleGroupItem samples vs max of other in sampleGroup
@@ -64,9 +65,9 @@ def sampleGroupToGenes(sampleGroup, sampleGroupItem, public_only=True, cutoff=10
 
     # Add average rank values
     df['meanRank'] = [rankScore.loc[geneId].mean() for geneId in df.index]
-    print(df.head())
+
     # Apply cutoff - this is applied to each combination of geneId-count
-    if not 'cutoff' is None:
+    if cutoff:
         df = pandas.concat([df[df['count']==count].sort_values('meanRank', ascending=False).iloc[:cutoff,:] for count in df['count'].unique()])
 
     df = df.sort_values(['count','meanRank'], ascending=False)
@@ -209,7 +210,7 @@ def createGenesets():
 # tests: eg. $nosetests -s <filename>:ClassName.func_name
 # ----------------------------------------------------------
 def test_sampleGroupToGenes():
-    print(sampleGroupToGenes('cell_type','macrophage'))
+    print(sampleGroupToGenes('cell_type','fibroblast')['rankScore'].head())
 
 def test_geneset():
     gs = genesetFromName('NABA_COLLAGENS')

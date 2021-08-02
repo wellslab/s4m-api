@@ -29,6 +29,7 @@ api.add_resource(datasets.DatasetMetadata, '/datasets/<int:datasetId>/metadata')
 api.add_resource(datasets.DatasetSamples, '/datasets/<int:datasetId>/samples')
 api.add_resource(datasets.DatasetExpression, '/datasets/<int:datasetId>/expression')
 api.add_resource(datasets.DatasetPca, '/datasets/<int:datasetId>/pca')
+api.add_resource(datasets.DatasetCorrelatedGenes, '/datasets/<int:datasetId>/correlated-genes')
 
 # Dataset and sample search
 api.add_resource(datasets.DatasetSearch, '/search/datasets')

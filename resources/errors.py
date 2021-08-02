@@ -15,6 +15,9 @@ class DatasetQCFilesMissingError(HTTPException):
 class DatasetProjectionFailedError(HTTPException):
     pass
 
+class GeneIdNotFoundError(HTTPException):
+    pass
+
 class UserNotAuthenticatedError(HTTPException):
     pass
 
@@ -40,6 +43,10 @@ errors = {
     },
     "DatasetProjectionFailedError": {
         "message": "Projection of dataset failed. Check file formats.",
+        "stauts": 400
+    },
+    "GeneIdNotFoundError": {
+        "message": "Gene id not found in the dataset.",
         "stauts": 400
     },
     "UserNotAuthenticatedError": {

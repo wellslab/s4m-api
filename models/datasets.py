@@ -22,7 +22,7 @@ only held in text files.
  7157, 7190, 7255, 7257, 7285, 7286, 7292, 7327, 7346, 7377]
 
 """
-import pymongo, os, pandas, numpy
+import pymongo, os, pandas, numpy, anndata
 from models.utilities import mongoClient
 from models.atlases import Atlas
 
@@ -31,7 +31,7 @@ database = mongoClient()["dataportal"]
 # These datasets have entries in the metadata table but are not ready to be exposed to the public - such as 6131, 
 # which is not in the normal format. Hence by default, datasetMetadataFromQuery() function here 
 # will exclude this hard coded list of datasets. You can still access these by using Dataset() initialiser.
-_exclude_list = [5002, 6127, 6130, 6131, 6149, 6150, 6151, 6155, 6187, 6197, 6368, 6655, 6754, 6776, 6948, 7012, 7115, 7209, 7217, 7218, 7250, 7311, 7401]
+_exclude_list = [5002, 6056, 6127, 6130, 6131, 6149, 6150, 6151, 6155, 6187, 6197, 6198, 6368, 6655, 6754, 6776, 6948, 7012, 7115, 7209, 7217, 7218, 7250, 7311, 7401]
 
 # ----------------------------------------------------------
 # Functions
@@ -367,6 +367,14 @@ class Dataset(object):
         Using 'cpm' for Microarray will still work, and fetch 'genes' in that case.
         applyLog2 will apply log2(df+1) if platform_type is RNASeq and max value is greater than 100.
         """
+        # ada = anndata.read_h5ad(f'/mnt/stemformatics-data/expression-files/{self.datasetId}_1.0.h5ad')
+        # df = ada.to_df().transpose()
+        # if 'RNASeq' in self.platformType() and key=='cpm': # get raw and calculate cpm
+        #     df = cpm(df)
+        # if applyLog2 and 'RNASeq' in self.platformType() and df.max().max()>100: # 
+        #     df = numpy.log2(df+1)
+        # return df
+        
         if 'RNASeq' in self.platformType() and key=='cpm': # get raw and calculate cpm
             df = pandas.read_csv(self.expressionFilePath(key='raw'), sep="\t", index_col=0)
             df = cpm(df)
@@ -396,7 +404,7 @@ class Dataset(object):
 
     # pca data -------------------------------------
     def pcaCoordinates(self):
-        """Return PCA coordinates as a pandas DataFrame object.
+        """Return PCA coordinates as a pandas DataFrame.
         """
         filepath = os.path.join(os.environ["EXPRESSION_FILEPATH"], "%s/%s.pca.tsv" % (self.datasetId, self.datasetId))
         df = pandas.read_csv(filepath, sep="\t", index_col=0) if os.path.exists(filepath) else pandas.DataFrame()
@@ -409,6 +417,22 @@ class Dataset(object):
         filepath = os.path.join(os.environ["EXPRESSION_FILEPATH"], "%s/%s.pca_attributes.tsv" % (self.datasetId, self.datasetId))
         return pandas.read_csv(filepath, sep="\t", index_col=0) if os.path.exists(filepath) else pandas.DataFrame()
 
+    # gene correlation analysis -------------------------------------
+    def correlatedGenes(self, geneId, cutoff=30):
+        """Return correlation as a pandas Series.
+        """
+        df = self.expressionMatrix(key='cpm')
+        if geneId not in df.index:
+            return None
+        values = df.loc[geneId]
+        
+        # Speed up the query by filtering out genes with low variance?
+        # What if geneId is one of the genes with low variance?
+        #var = df.var(axis=1)
+        #df = df.loc[var[var>1].index]
+
+        corr = df.corrwith(values, axis=1).sort_values(ascending=False)
+        return corr[:cutoff]
 
 # ----------------------------------------------------------
 # tests: eg. $nosetests -s <filename>:ClassName.func_name
@@ -435,6 +459,12 @@ def test_datasetMetadataFromQuery():
     for key,val in s.items():
         print('{platform_type:%s, number_of_datasets:%s}' % (key,val))
     print(df.groupby(['projects','platform_type']).size().to_dict())
+
+def test_expression():
+    ada = anndata.read_h5ad('/mnt/stemformatics-data/expression-files/6198_1.0.h5ad')
+    df = ada.to_df().transpose()
+    print(df.head())
+    print(Dataset(6198).expressionMatrix(key='genes').head())
 
 def test_datasetMetadataVsDatasetLoadingTime():
     """Compare times for bulk query in mongo vs constructing a data frame after individual queries
