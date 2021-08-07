@@ -15,29 +15,37 @@ performing gene expression analyses across multiple datasets happens often, so i
     return geneIds
 
 """
-import requests, os, pandas, json, anndata
+import requests, os, pandas, numpy, json, anndata
 from models import datasets
+from models.utilities import mongoClient
 
-def sampleGroupToGenes(sampleGroup, sampleGroupItem, public_only=True, cutoff=10):
-    import time
-    t0 = time.time()
-    allDatasetIds = datasets.datasetMetadataFromQuery(ids_only=True, public_only=public_only)
+def sampleGroupToGenes(sampleGroup, sampleGroupItem, cutoff=10):
+    """Given a sampleGroup and sampleGroupItem, (eg cell_type=monocyte), loop through each dataset which
+    contains this sample and calculate genes for high expression.
+    """
+    # Find records in samples collection matching sampleGroupItem - just get dataset ids for now
+    cursor = mongoClient()["dataportal"]["samples"].find({sampleGroup: sampleGroupItem}, {"_id":0, "dataset_id":1})
+    datasetIds = [item['dataset_id'] for item in cursor]
+
+    # Restrict to public human datasets, Microarray and RNASeq only
+    datasetIds = list(set(datasets.publicDatasetIds()).intersection(set(datasetIds)))
+
+    # Get all samples for these datasetIds - quicker to make one mongo query than to loop through Dataset object
+    cursor = mongoClient()["dataportal"]["samples"].find({'dataset_id': {'$in':datasetIds}}, {"_id":0})
+    allSamples = pandas.DataFrame(cursor).set_index("sample_id") if cursor.count()!=0 else pandas.DataFrame()
 
     # This will hold genes as index and rank score for each gene in each dataset
     rankScore = pandas.Series(dtype=float)
     datasetIds = {}
     uniqueDatasetIds = set()  # keep track of all dataset ids used for scoring
 
-    for datasetId in allDatasetIds:
-        ds = datasets.Dataset(datasetId)
-        samples = ds.samples()
+    for datasetId in allSamples['dataset_id'].unique():
+        samples = allSamples[allSamples['dataset_id']==datasetId]
 
         # ignore dataset if sampleGroupItem isn't found or there's only one sampleGroupItem
-        if sampleGroupItem not in samples[sampleGroup].tolist() or len(samples[sampleGroup].unique())==1 or\
-            not ds.platformType() in ['Microarray','RNASeq']: continue
+        if len(samples[sampleGroup].unique())==1: continue
                 
-        exp = ds.expressionMatrix(key='cpm', applyLog2=True)
-        if exp.index[0].startswith('ENSMUSG'): continue
+        exp = datasets.Dataset(datasetId).expressionMatrix(key='cpm', applyLog2=True)
         exp = exp[samples.index]
         
         # Calculate the difference between mean of sampleGroupItem samples vs max of other in sampleGroup
@@ -51,69 +59,85 @@ def sampleGroupToGenes(sampleGroup, sampleGroupItem, public_only=True, cutoff=10
         # Remember dataset id for all the genes in diff
         for geneId in diff.index:
             if geneId not in datasetIds: datasetIds[geneId] = []
-            datasetIds[geneId].append(ds.datasetId)
-            uniqueDatasetIds.add(ds.datasetId)
+            datasetIds[geneId].append(datasetId)
+            uniqueDatasetIds.add(datasetId)
 
         # Row concatenate this Series for all datasets after converting diff into normalised ranks 
         # (so 0 is lowest diff value, 1 is highest)
         rankScore = pandas.concat([rankScore, diff.rank()/len(diff)])
 
-    # Count the number of times each gene occurs in this series
-    df = rankScore.index.value_counts().to_frame(name='count')
+    # Create data frame of average rank values
+    df = pandas.DataFrame({'meanRank': rankScore.groupby(rankScore.index).mean()})
+
     if len(df)==0:
         return {'rankScore':pandas.DataFrame(), 'totalDatasets':len(uniqueDatasetIds)}
 
-    # Add average rank values
-    df['meanRank'] = [rankScore.loc[geneId].mean() for geneId in df.index]
+    # Add datasetIds and count of them
+    df['datasetIds'] = [','.join(map(str,datasetIds[geneId])) for geneId in df.index]
+    df['count'] = [len(datasetIds[geneId]) for geneId in df.index]
+    df.index.name = "geneId"
 
     # Apply cutoff - this is applied to each combination of geneId-count
     if cutoff:
         df = pandas.concat([df[df['count']==count].sort_values('meanRank', ascending=False).iloc[:cutoff,:] for count in df['count'].unique()])
 
-    df = df.sort_values(['count','meanRank'], ascending=False)
-    
-    # Add datasetIds
-    df['datasetIds'] = [','.join(map(str,datasetIds[geneId])) for geneId in df.index]
-    df.index.name = "geneId"
-    
-    print(time.time()-t0)
+    df = df.sort_values(['count','meanRank'], ascending=False)    
     return {'rankScore':df, 'totalDatasets':len(uniqueDatasetIds)}
 
-def createGeneToSampleGroupsData():
-    filepath = '/mnt/stemformatics-data/backups/gene_to_sample_groups.h5ad'
-    ada = anndata.AnnData(obsm=pandas.DataFrame(columns=['cell_type', 'datasetId']))
-    ada.write(filepath)
-    return
-    ada = anndata.read_h5ad(filepath)
+def geneToSampleGroups(geneId, sampleGroup='cell_type'):
+    # filepath = '/mnt/stemformatics-data/backups/gene_to_sample_groups.h5ad'
+    # ada = anndata.AnnData(obsm=pandas.DataFrame(columns=['cell_type', 'datasetId']))
+    # ada.write(filepath)
+    # return
+    # ada = anndata.read_h5ad(filepath)
 
-    geneId = 'ENSG00000102145'
-    sampleGroup = 'cell_type'  # perhaps turn this into a parameter later
+    # Restrict to public human datasets, Microarray and RNASeq only
+    allDatasetIds = datasets.publicDatasetIds()
 
-    expressionFilepath = "/mnt/stemformatics-data/expression-files"
-    os.chdir(expressionFilepath)
-    for path in os.listdir(expressionFilepath):
-        datasetId = int(path.split('_')[0])
+    # Also no need to look at cell types with only a few samples assigned to them
+    #sampleCount = datasets.allValues('samples', sampleGroup, includeCount=True, excludeDatasets=datasets._exclude_list)
+    #sampleGroupItems =  sampleCount[sampleCount>10].index.tolist()
+
+    # DataFrame to hold the result
+    result = pandas.DataFrame()
+
+    for datasetId in allDatasetIds:
         ds = datasets.Dataset(datasetId)
-        ad = anndata.read_h5ad(path)
-
         samples = ds.samples()
-        samples = samples.loc[samples.index.intersection(ad.obs_names)]
-        if len(samples)<4: # we need at least 2 replicates in each cell type
+        samples = samples[samples[sampleGroup].notnull()] # focus on only non-null cell types
+        #samples = samples[samples[sampleGroup].isin(sampleGroupItems)]  # other sampleGroupItems are too infrequent
+        if len(samples[sampleGroup].unique())<2:  # we need at least 2 different cell types which aren't null
             continue
-        elif len(samples[sampleGroup].unique())<2:  # we need at least 2 different cell types
+        df = ds.expressionMatrix(key='cpm')
+        if geneId not in df.index or len(df.columns.intersection(samples.index))==0:
             continue
-        samples = samples.fillna("[unspecified]")
 
-        print(datasetId)
-        if geneId in ad.var_names:
-            series = ad[samples.index,geneId].to_df()[geneId]
-            mean = series.groupby(samples[sampleGroup]).mean().round()
-            df = pandas.DataFrame({'var':mean.var(), 'rank':mean.rank()})
-            
-            print(df)
-        return
+        # get values of the gene aligned to samples
+        values = df.loc[geneId][samples.index]
 
-        if len(result)>30: break
+        mean = values.groupby(samples[sampleGroup]).mean().round()
+        var = mean.var()
+        if var<1: continue
+
+        # only keep those above median
+        diff = mean - mean.median()
+        diff = diff[diff>0]
+
+        # rank = mean.rank()/len(mean)  # {'fibroblast': 0.5, 'peripheral blood mononuclear cell': 1.0}
+        # rank = rank.sort_values(ascending=False)
+
+        # Create a data frame with all the info and row concatenate this for all datasets
+        df = pandas.DataFrame({'score':diff, 'datasetIds':[datasetId for item in diff.index]})
+        result = pandas.concat([result,df])
+
+    # Transform result by grouping sampleGroupItem values
+    result = result.groupby(result.index).agg({'score':list, 'datasetIds':list})
+
+    # Add other properties
+    #result['meanRank'] = [numpy.mean(item) for item in result['ranks']]
+    result['count'] = [len(item) for item in result['datasetIds']]
+
+    return result#.sort_values(['meanRank','count'], ascending=False)
 
 
 def createGeneset(msigName=None, name=None, geneSymbols=[], sampleGroupItem='cell_type'):
@@ -210,7 +234,11 @@ def createGenesets():
 # tests: eg. $nosetests -s <filename>:ClassName.func_name
 # ----------------------------------------------------------
 def test_sampleGroupToGenes():
-    print(sampleGroupToGenes('cell_type','fibroblast')['rankScore'].head())
+    print(sampleGroupToGenes('cell_type','fibroblast'))
+    #['rankScore'].head())
+
+def test_geneToSampleGroups():
+    print(geneToSampleGroups('ENSG00000102145'))
 
 def test_geneset():
     gs = genesetFromName('NABA_COLLAGENS')

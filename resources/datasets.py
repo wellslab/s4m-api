@@ -314,14 +314,14 @@ class Values(Resource):
         publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
         if args.get('include_count').lower().startswith('t'):
             values = datasets.allValues(collection, key, includeCount=True, public_only=publicOnly, 
-                                        excludeDatasets=_exclude_some_datasets, organism=args.get('organism'))
+                                        excludeDatasets=datasets._exclude_list, organism=args.get('organism'))
             if values is None:
                 raise KeyNotFoundError
             else:
                 return values.to_dict() 
         else:
             values = datasets.allValues(collection, key, public_only=publicOnly, 
-                                        excludeDatasets=_exclude_some_datasets,organism=args.get('organism'))
+                                        excludeDatasets=datasets._exclude_list,organism=args.get('organism'))
             if values is None:
                 raise KeyNotFoundError
             else:

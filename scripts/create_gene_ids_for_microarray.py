@@ -75,7 +75,9 @@ def createFile(datasetId, report_only=False):
 
     # write to file
     print(len(df), len(data))
-    pandas.DataFrame(data, index=genes, columns=df.columns).to_csv(ds.expressionFilePath(key='genes'), sep='\t')
+    df = pandas.DataFrame(data, index=genes, columns=df.columns)
+    df.to_csv(ds.expressionFilePath(key='genes'), sep='\t')
+    df.to_hdf(ds.expressionFilePath(key='genes', hdf5=True), 'genes')
 
 def createFileOld(datasetId, report_only=False):
     ds = datasets.Dataset(datasetId)

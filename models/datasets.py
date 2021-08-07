@@ -31,7 +31,7 @@ database = mongoClient()["dataportal"]
 # These datasets have entries in the metadata table but are not ready to be exposed to the public - such as 6131, 
 # which is not in the normal format. Hence by default, datasetMetadataFromQuery() function here 
 # will exclude this hard coded list of datasets. You can still access these by using Dataset() initialiser.
-_exclude_list = [5002, 6056, 6127, 6130, 6131, 6149, 6150, 6151, 6155, 6187, 6197, 6198, 6368, 6655, 6754, 6776, 6948, 7012, 7115, 7209, 7217, 7218, 7250, 7311, 7401]
+_exclude_list = [5002, 6056, 6127, 6130, 6131, 6149, 6150, 6151, 6155, 6187, 6197, 6198, 6368, 6655, 6701, 6754, 6776, 6948, 7012, 7115, 7209, 7217, 7218, 7250, 7311, 7401]
 
 # ----------------------------------------------------------
 # Functions
@@ -40,6 +40,11 @@ def cpm(df):
     """Return the counts per million version of data frame.
     """
     return (df * 1000000).div(df.sum(axis = 0), axis = 1)
+
+def publicDatasetIds(organism='homo sapiens', platform_type='Microarray,RNASeq'):
+    """Shortcut for the most common query we make in the system for datasets
+    """
+    return datasetMetadataFromQuery(ids_only=True, public_only=True, organism=organism, platform_type=platform_type)
 
 def datasetMetadataFromQuery(**kwargs):
     """Return DataFrame of dataset metadata which match a query. Rows will have dataset ids,
@@ -82,7 +87,7 @@ def datasetMetadataFromQuery(**kwargs):
 
     if organism and organism!='all':  # restrict datasets to samples with this organism
         sampleSearch = database["samples"].find({'organism': organism}, {'dataset_id':1})
-        datasetIds = list(set(datasetIds).union(set([item['dataset_id'] for item in sampleSearch])))
+        datasetIds = list(set(datasetIds).intersection(set([item['dataset_id'] for item in sampleSearch])))
 
     if len(dataset_id)>0 and len(datasetIds)>0:  # find common dataset ids
         datasetIds = list(set(datasetIds).intersection(set([int(item) for item in dataset_id])))
@@ -92,8 +97,10 @@ def datasetMetadataFromQuery(**kwargs):
     if len(datasetIds)>0:
         params['dataset_id']["$in"] = datasetIds
 
-    if platform_type:
-        params['platform_type'] = platform_type
+    if platform_type: 
+        # assume a list of platform types supplied if there's a comma
+        params['platform_type'] = {"$in": platform_type.split(',')} if ',' in platform_type else platform_type
+
     if projects:
         if projects=='atlas':  # any atlas project
             params["projects"] = {"$in":["%s_atlas" % atlasType for atlasType in Atlas.all_atlas_types]}
@@ -362,11 +369,36 @@ class Dataset(object):
     # expression matrix -------------------------------------
     def expressionMatrix(self, key="raw", applyLog2=False):
         """Return expression matrix for this dataset as a pandas DataFrame.
-        key is one of ["raw","genes"] for microarray and ["raw","cpm"] for RNASeq.
-        Using 'genes' for RNASeq will still work, and fetch 'raw' in that case.
-        Using 'cpm' for Microarray will still work, and fetch 'genes' in that case.
+        key may be one of ['raw','genes','cpm'].
+
+        For Microarray data, 'cpm' is treated as 'genes', as there is no cpm calculation done to them.
+        For RNASeq data, 'raw' and 'genes' are the same, while 'cpm' calculates cpm values.
+
         applyLog2 will apply log2(df+1) if platform_type is RNASeq and max value is greater than 100.
         """
+        # First get filepath to the expression matrix - always fetch h5 file if we can for speed
+        isMicroarray = self.platformType()=='Microarray'
+        filepath = ''
+        if isMicroarray: # fetch genes.h5 unless key='raw'
+            if key=='cpm': key = 'genes'
+            filepath = self.expressionFilePath(key=key, hdf5=key=='genes')
+        else:
+            if key=='raw': key = 'genes'
+            filepath = self.expressionFilePath(hdf5=True)
+
+        if filepath.endswith('.h5'):
+            df = pandas.read_hdf(filepath, key='genes')
+        else:
+            df = pandas.read_csv(filepath, sep="\t", index_col=0)
+
+        if not isMicroarray and key=='cpm':
+            df = cpm(df)
+
+        if applyLog2 and not isMicroarray and df.max().max()>100: # 
+            df = numpy.log2(df+1)
+
+        return df
+
         # ada = anndata.read_h5ad(f'/mnt/stemformatics-data/expression-files/{self.datasetId}_1.0.h5ad')
         # df = ada.to_df().transpose()
         # if 'RNASeq' in self.platformType() and key=='cpm': # get raw and calculate cpm
@@ -375,32 +407,26 @@ class Dataset(object):
         #     df = numpy.log2(df+1)
         # return df
         
-        if 'RNASeq' in self.platformType() and key=='cpm': # get raw and calculate cpm
-            df = pandas.read_csv(self.expressionFilePath(key='raw'), sep="\t", index_col=0)
-            df = cpm(df)
-        elif self.platformType()=='Microarray' and key=='cpm':
-            df = pandas.read_csv(self.expressionFilePath(key='genes'), sep="\t", index_col=0)
-        else:
-            df = pandas.read_csv(self.expressionFilePath(key=key), sep="\t", index_col=0)
-
-        if applyLog2 and 'RNASeq' in self.platformType() and df.max().max()>100: # 
-            df = numpy.log2(df+1)
-
-        return df
-
-    def expressionFilePath(self, key="raw"):
-        """Return the full path to the expression file.
-        key is one of ["raw","genes"] for microarray and ["raw"] for RNASeq.
-        Using 'genes' for RNASeq will still work, and fetch 'raw' in that case.
-        Using 'cpm' for Microarray will still work, and fetch 'genes' in that case.
+    def expressionFilePath(self, key="genes", hdf5=False):
+        """Return the full path to the expression file. key may be one of ["raw","genes"].
+        For RNASeq data, key is ignored, so key=genes is same as raw.
+        If hdf5=True, will return the filepath to the .h5 file instead of .tsv (only for key=genes)
         """
         if "EXPRESSION_FILEPATH" not in os.environ:
             raise ExpressionFilePathNotFoundError("EXPRESSION_FILEPATH not found in os.environ.")
-        if self.platformType()=='RNASeq' and key=='genes': # make it same as raw
-            key = 'raw'
-        elif self.platformType()=='Microarray' and key=='cpm': # make it same as genes
-            key = 'genes'
-        return os.path.join(os.environ["EXPRESSION_FILEPATH"], "%s/%s.%s.tsv" % (self.datasetId, self.datasetId, key))
+        
+        filesuffix = ""
+        if self.platformType()=='Microarray':
+            if key=='raw' and hdf5:
+                raise Exception("There is no h5 version of raw file for microarray data.")
+            elif key=='genes' and hdf5:
+                filesuffix = 'genes.h5'
+            else:
+                filesuffix = f'{key}.tsv'
+        else:
+            filesuffix = 'genes.h5' if hdf5 else 'raw.tsv'
+
+        return os.path.join(os.environ["EXPRESSION_FILEPATH"], f"{self.datasetId}/{self.datasetId}.{filesuffix}")
 
     # pca data -------------------------------------
     def pcaCoordinates(self):
@@ -449,22 +475,34 @@ def test_samples():
     assert df.shape==(9,21)
     assert df.at["6003_GSM396481", "cell_type"] == "hESC-derived monocyte"
 
+def test_expressionFilepath():
+    ds = Dataset(6003)
+    print(ds.expressionFilePath(key='raw'))
+    print(ds.expressionFilePath(key='genes'))
+    print(ds.expressionFilePath(key='genes', hdf5=True))
+    ds = Dataset(7419)
+    print(ds.expressionFilePath(key='raw'))
+    print(ds.expressionFilePath(key='genes'))
+    print(ds.expressionFilePath(key='raw', hdf5=True))
+    print(ds.expressionFilePath(hdf5=True))
+
 def test_datasetMetadataFromQuery():
     datasetIds = datasetMetadataFromQuery(dataset_id=[2000,_exclude_list[0]], ids_only=True)
     assert datasetIds==[2000]
     df = datasetMetadataFromQuery()
     assert len(set(_exclude_list).intersection(set(df.index)))==0
-    return
-    s = df.groupby('platform_type').size()
-    for key,val in s.items():
-        print('{platform_type:%s, number_of_datasets:%s}' % (key,val))
-    print(df.groupby(['projects','platform_type']).size().to_dict())
+    df = datasetMetadataFromQuery(query_string='abud', include_samples_query=True)
+    print(df.shape)
 
 def test_expression():
-    ada = anndata.read_h5ad('/mnt/stemformatics-data/expression-files/6198_1.0.h5ad')
-    df = ada.to_df().transpose()
-    print(df.head())
-    print(Dataset(6198).expressionMatrix(key='genes').head())
+    df = Dataset(2000).expressionMatrix(key='raw')
+    assert df.index[0].startswith('ILMN')
+    df = Dataset(2000).expressionMatrix(key='cpm')
+    assert df.index[0].startswith('ENSG')
+    df = Dataset(7419).expressionMatrix(key='raw')
+    assert df.index[0].startswith('ENSG') and df.iloc[0,0]==61
+    df = Dataset(7419).expressionMatrix(key='cpm', applyLog2=True)
+    assert df.max().max()<15
 
 def test_datasetMetadataVsDatasetLoadingTime():
     """Compare times for bulk query in mongo vs constructing a data frame after individual queries
