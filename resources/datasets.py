@@ -131,11 +131,11 @@ class DatasetCorrelatedGenes(Resource):
         """
         parser = reqparse.RequestParser()
         parser.add_argument('gene_id', type=str, required=True)
-        parser.add_argument('cutoff', type=int, required=False, default=100)
+        parser.add_argument('cutoff', type=int, required=False, default=30)
         args = parser.parse_args()
 
         ds = protectedDataset(datasetId)
-        result = ds.correlatedGenes(args.get('gene_id'))
+        result = ds.correlatedGenes(args.get('gene_id'), cutoff=args.get('cutoff'))
         if result is None:
             raise GeneIdNotFoundError
         return result.to_dict()
@@ -334,7 +334,6 @@ class Download(Resource):
         parser = reqparse.RequestParser()
         parser.add_argument('dataset_id', type=str, required=True) # comma separated list of dataset ids
         parser.add_argument('exclude_some_datasets', type=str, required=False, default="True")
-        parser.add_argument('sep', type=str, required=False, default="\t")  # separator to use for each file
         args = parser.parse_args()
 
         publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None

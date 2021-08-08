@@ -47,8 +47,8 @@ api.add_resource(genes.GeneToSampleGroups, '/genes/gene-to-sample-groups')
 #api.add_resource(genes.GenesetCollection, '/genes/geneset-collection')
 
 # Atlas data
-api.add_resource(atlases.Atlas, '/atlases/<atlasType>/<item>')
 api.add_resource(atlases.AtlasTypes, '/atlas-types')
+api.add_resource(atlases.Atlas, '/atlases/<atlasType>/<item>')
 api.add_resource(atlases.AtlasProjection, '/atlas-projection/<atlasType>/<dataSource>')
 
 # API for authentication

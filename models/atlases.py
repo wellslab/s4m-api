@@ -46,7 +46,7 @@ class Atlas(object):
 
     def __init__(self, atlasType, version=None):
         # each atlas type is under its own directory under ATLAS_FILEPATH
-        directory = atlasType if version is None else '%s_%s' % (atlasType, version)
+        directory = atlasType if not version else '%s_%s' % (atlasType, version)
         self.atlasFilePath = os.path.join(os.environ["ATLAS_FILEPATH"], directory)
 
         # Work out version based on link
