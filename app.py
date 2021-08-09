@@ -30,6 +30,7 @@ api.add_resource(datasets.DatasetSamples, '/datasets/<int:datasetId>/samples')
 api.add_resource(datasets.DatasetExpression, '/datasets/<int:datasetId>/expression')
 api.add_resource(datasets.DatasetPca, '/datasets/<int:datasetId>/pca')
 api.add_resource(datasets.DatasetCorrelatedGenes, '/datasets/<int:datasetId>/correlated-genes')
+api.add_resource(datasets.DatasetTtest, '/datasets/<int:datasetId>/ttest')
 
 # Dataset and sample search
 api.add_resource(datasets.DatasetSearch, '/search/datasets')

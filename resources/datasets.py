@@ -140,6 +140,22 @@ class DatasetCorrelatedGenes(Resource):
             raise GeneIdNotFoundError
         return result.to_dict()
 
+class DatasetTtest(Resource):
+    def get(self, datasetId):
+        """Return the result of a T-test (https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html).
+        Note that sample_group_item1 and 2 should be suitably url escaped (encodeURIComponent seem to work best), otherwise
+        "CD41+ cell" will just arrive here as "CD41 cell".
+        """
+        parser = reqparse.RequestParser()
+        parser.add_argument('gene_id', type=str, required=True)
+        parser.add_argument('sample_group', type=str, required=True)
+        parser.add_argument('sample_group_item1', type=str, required=True)
+        parser.add_argument('sample_group_item2', type=str, required=True)
+        args = parser.parse_args()
+        ds = protectedDataset(datasetId)
+        result = ds.ttest(args.get('gene_id'), args.get('sample_group'), [args.get('sample_group_item1'), args.get('sample_group_item2')])
+        return result
+
 # ----------------------------------------------------------
 # Working on groups of datasets - searching, fetching values
 # ----------------------------------------------------------

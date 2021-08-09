@@ -32,14 +32,12 @@ class SampleGroupToGenes(Resource):
 
 class GeneToSampleGroups(Resource):
     def get(self):
-        """
+        """Returns highly expressed sample group items under sample group, given gene_id.
         """
         parser = reqparse.RequestParser()
         parser.add_argument('gene_id', type=str, required=True)
         parser.add_argument('sample_group', type=str, required=False, default='cell_type')
         args = parser.parse_args()
-        #geneId = 'ENSG00000102145'
-        #sampleGroup = 'cell_type'  # perhaps turn this into a parameter later
                 
         result = genes.geneToSampleGroups(args.get('gene_id'), args.get('sample_group'))
         return result.to_dict(orient='index')

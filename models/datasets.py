@@ -443,7 +443,7 @@ class Dataset(object):
         filepath = os.path.join(os.environ["EXPRESSION_FILEPATH"], "%s/%s.pca_attributes.tsv" % (self.datasetId, self.datasetId))
         return pandas.read_csv(filepath, sep="\t", index_col=0) if os.path.exists(filepath) else pandas.DataFrame()
 
-    # gene correlation analysis -------------------------------------
+    # Analysis functions -------------------------------------
     def correlatedGenes(self, geneId, cutoff=30):
         """Return correlation as a pandas Series.
         """
@@ -459,6 +459,22 @@ class Dataset(object):
 
         corr = df.corrwith(values, axis=1).sort_values(ascending=False)
         return corr[:cutoff]
+
+    def ttest(self, geneId, sampleGroup, sampleGroupItems):
+        """Return the result of running T-test between elements of sampleGroupItems.
+        The result looks like: {statistic:-1.0418722798394733, pvalue:0.3220043225434629}
+        """
+        from scipy.stats import ttest_ind
+        df = self.expressionMatrix(key='cpm')
+        if geneId not in df.index:
+            return None
+        samples = self.samples()
+        values = df.loc[geneId, samples.index]
+        sampleIds1 = samples[samples[sampleGroup]==sampleGroupItems[0]].index
+        sampleIds2 = samples[samples[sampleGroup]==sampleGroupItems[1]].index
+        result = ttest_ind(values[sampleIds1], values[sampleIds2])
+
+        return {'statistic': result.statistic, 'pvalue': result.pvalue}
 
 # ----------------------------------------------------------
 # tests: eg. $nosetests -s <filename>:ClassName.func_name
@@ -503,6 +519,12 @@ def test_expression():
     assert df.index[0].startswith('ENSG') and df.iloc[0,0]==61
     df = Dataset(7419).expressionMatrix(key='cpm', applyLog2=True)
     assert df.max().max()<15
+
+def test_ttest():
+    ds = Dataset(8144) 
+    print(ds.ttest('ENSG00000197576', 'cell_type', ['conventional dendritic cell', 'macrophage']))
+    print(ds.ttest('ENSG00000150048', 'sample_type', ['CD14+ cell', 'cDC1']))
+    print(ds.ttest('ENSG00000172954', 'sample_type', ['CD14+ cell', 'cDC1']))
 
 def test_datasetMetadataVsDatasetLoadingTime():
     """Compare times for bulk query in mongo vs constructing a data frame after individual queries

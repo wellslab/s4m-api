@@ -134,11 +134,9 @@ def geneToSampleGroups(geneId, sampleGroup='cell_type'):
     result = result.groupby(result.index).agg({'score':list, 'datasetIds':list})
 
     # Add other properties
-    #result['meanRank'] = [numpy.mean(item) for item in result['ranks']]
     result['count'] = [len(item) for item in result['datasetIds']]
 
-    return result#.sort_values(['meanRank','count'], ascending=False)
-
+    return result
 
 def createGeneset(msigName=None, name=None, geneSymbols=[], sampleGroupItem='cell_type'):
     """Create a geneset from some source. If msigName, use name of MsigDB from Broad Institute.
