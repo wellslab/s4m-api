@@ -19,10 +19,12 @@ import requests, os, pandas, numpy, json, anndata
 from models import datasets
 from models.utilities import mongoClient
 
-def sampleGroupToGenes(sampleGroup, sampleGroupItem, cutoff=10):
+def sampleGroupToGenes(sampleGroup, sampleGroupItem, sampleGroupItem2=None, cutoff=20):
     """Given a sampleGroup and sampleGroupItem, (eg cell_type=monocyte), loop through each dataset which
     contains this sample and calculate genes for high expression.
     """
+    if sampleGroupItem2=='': sampleGroupItem2 = None
+
     # Find records in samples collection matching sampleGroupItem - just get dataset ids for now
     cursor = mongoClient()["dataportal"]["samples"].find({sampleGroup: sampleGroupItem}, {"_id":0, "dataset_id":1})
     datasetIds = [item['dataset_id'] for item in cursor]
@@ -41,16 +43,23 @@ def sampleGroupToGenes(sampleGroup, sampleGroupItem, cutoff=10):
 
     for datasetId in allSamples['dataset_id'].unique():
         samples = allSamples[allSamples['dataset_id']==datasetId]
-
-        # ignore dataset if sampleGroupItem isn't found or there's only one sampleGroupItem
+        
+        # ignore dataset if there's only one sampleGroupItem as we can't make comparisons
         if len(samples[sampleGroup].unique())==1: continue
-                
+        
+        if not sampleGroupItem2 is None: # further ignore if this isn't found in the dataset
+            # we could do this in the mongo search above but that first search is fast enough
+            if not sampleGroupItem2 in samples[sampleGroup].tolist(): continue
+
         exp = datasets.Dataset(datasetId).expressionMatrix(key='cpm', applyLog2=True)
         exp = exp[samples.index]
         
         # Calculate the difference between mean of sampleGroupItem samples vs max of other in sampleGroup
         df1 = exp[samples[samples[sampleGroup]==sampleGroupItem].index].mean(axis=1)
-        df2 = exp[samples[samples[sampleGroup]!=sampleGroupItem].index].max(axis=1)
+        if sampleGroupItem2 is None: 
+            df2 = exp[samples[samples[sampleGroup]!=sampleGroupItem].index].max(axis=1)
+        else:
+            df2 = exp[samples[samples[sampleGroup]==sampleGroupItem2].index].max(axis=1)
         diff = df1 - df2
 
         # Only keep +ve scores
@@ -77,11 +86,16 @@ def sampleGroupToGenes(sampleGroup, sampleGroupItem, cutoff=10):
     df['count'] = [len(datasetIds[geneId]) for geneId in df.index]
     df.index.name = "geneId"
 
-    # Apply cutoff - this is applied to each combination of geneId-count
+    # Apply cutoff - this is first applied to each combination of geneId-count
     if cutoff:
         df = pandas.concat([df[df['count']==count].sort_values('meanRank', ascending=False).iloc[:cutoff,:] for count in df['count'].unique()])
 
-    df = df.sort_values(['count','meanRank'], ascending=False)    
+    df = df.sort_values(['count','meanRank'], ascending=False)
+
+    # apply cutoff again, just to make it less confusing for the output
+    if cutoff:
+        df = df.iloc[:cutoff,:]
+     
     return {'rankScore':df, 'totalDatasets':len(uniqueDatasetIds)}
 
 def geneToSampleGroups(geneId, sampleGroup='cell_type'):

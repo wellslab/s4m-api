@@ -23,11 +23,13 @@ class SampleGroupToGenes(Resource):
         parser = reqparse.RequestParser()
         parser.add_argument('sample_group', type=str, required=True)
         parser.add_argument('sample_group_item', type=str, required=True)
-        parser.add_argument('cutoff', type=int, required=False, default=10)  # use 0 or None to get all results
+        parser.add_argument('sample_group_item2', type=str, required=False)
+        parser.add_argument('cutoff', type=int, required=False, default=20)  # use 0 or None to get all results
         args = parser.parse_args()
         
-        result = genes.sampleGroupToGenes(args.get('sample_group'), args.get('sample_group_item'), cutoff=args.get('cutoff'))
-        return {'sampleGroup':args.get('sample_group'), 'sampleGroupItem':args.get('sample_group_item'), 
+        result = genes.sampleGroupToGenes(args.get('sample_group'), args.get('sample_group_item'), 
+            sampleGroupItem2=args.get('sample_group_item2'), cutoff=args.get('cutoff'))
+        return {'sampleGroup':args.get('sample_group'), 'sampleGroupItem':args.get('sample_group_item'), 'sampleGroupItem2':args.get('sample_group_item2'),
                 'rankScore':result['rankScore'].reset_index().to_dict(orient='records'), 'totalDatasets':result['totalDatasets']}
 
 class GeneToSampleGroups(Resource):

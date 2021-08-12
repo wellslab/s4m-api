@@ -321,8 +321,8 @@ class Dataset(object):
     # This is the full list of fields associated with sample metadata
     sample_fields = ["sample_id", "dataset_id", "cell_type", "parental_cell_type", "final_cell_type", "disease_state", 
                "organism", "sample_type", "tissue_of_origin", "sample_name_long", "media", "cell_line", "facs_profile", 
-               "sample_description", "age_time", "sex", "reprogramming_method", "genetic_modification",
-               "labelling", "developmental_stage", "treatment", "external_source_id"]
+               "sample_description", "experiment_time", "sex", "reprogramming_method", "genetic_modification",
+               "sample_source", "developmental_stage", "treatment", "external_source_id"]
 
     # All available platform_type values
     platform_types = ["Microarray", "RNASeq", "scRNASeq", "other"]
@@ -465,7 +465,7 @@ class Dataset(object):
         The result looks like: {statistic:-1.0418722798394733, pvalue:0.3220043225434629}
         """
         from scipy.stats import ttest_ind
-        df = self.expressionMatrix(key='cpm')
+        df = self.expressionMatrix(key='cpm', applyLog2=True)
         if geneId not in df.index:
             return None
         samples = self.samples()
@@ -483,11 +483,11 @@ class Dataset(object):
 # See .env file for a full list of variables to set.
 
 def test_metadata():
-    assert Dataset(0) is None
     assert Dataset(2000).metadata()["name"] == "Matigian_2010_20699480"
 
 def test_samples():
     df = Dataset(6003).samples()
+    assert set(df.reset_index().columns)==set(Dataset.sample_fields)
     assert df.shape==(9,21)
     assert df.at["6003_GSM396481", "cell_type"] == "hESC-derived monocyte"
 
