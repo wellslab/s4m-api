@@ -25,10 +25,11 @@ class SampleGroupToGenes(Resource):
         parser.add_argument('sample_group_item', type=str, required=True)
         parser.add_argument('sample_group_item2', type=str, required=False)
         parser.add_argument('cutoff', type=int, required=False, default=20)  # use 0 or None to get all results
+        parser.add_argument('scoring_method', type=str, required=False, default='max')
         args = parser.parse_args()
         
         result = genes.sampleGroupToGenes(args.get('sample_group'), args.get('sample_group_item'), 
-            sampleGroupItem2=args.get('sample_group_item2'), cutoff=args.get('cutoff'))
+            sampleGroupItem2=args.get('sample_group_item2'), cutoff=args.get('cutoff'), scoringMethod=args.get('scoring_method'))
         return {'sampleGroup':args.get('sample_group'), 'sampleGroupItem':args.get('sample_group_item'), 'sampleGroupItem2':args.get('sample_group_item2'),
                 'rankScore':result['rankScore'].reset_index().to_dict(orient='records'), 'totalDatasets':result['totalDatasets']}
 

@@ -222,10 +222,7 @@ class DatasetSearch(Resource):
         elif args.get('format')=='sunburst2': 
             df = datasets.sunburstData(samples, parentKey='tissue_of_origin', childKey='cell_type')
             return df.reset_index().to_dict(orient='list')
-        
-        if len(df)==0: # no matching result found
-            return []
-            
+                    
         # Add sample related columns
         samples = samples.fillna('[unassigned]')
         df['samples'] = [len(samples[samples['dataset_id']==index]) for index in df.index]  # number of samples in each dataset
@@ -234,6 +231,11 @@ class DatasetSearch(Resource):
 
         # Add some derived columns for convenience
         displayNames, pubmedIds, years = [], [], []
+        if len(df)==0: # no matching results found - need these columns anyway
+            df['name'] = []
+            df['projects'] = []
+            df['platform_type'] = []
+
         for name in df["name"]:
             items = name.split("_")
             pubmedIds.append(items[2])

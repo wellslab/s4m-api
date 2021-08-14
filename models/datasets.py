@@ -78,12 +78,17 @@ def datasetMetadataFromQuery(**kwargs):
         params['private'] = False
 
     datasetIds = []  # this is additional dataset ids to search, based on sample search
-    if include_samples_query and query_string:  
-        # perform text search in both datasets and samples and use union
-        sampleSearch = database["samples"].find({'$text': {'$search':query_string}}, {'dataset_id':1})
-        datasetIds = [item['dataset_id'] for item in sampleSearch]
-        datasetsSearch = database["datasets"].find({'$text': {'$search':query_string}}, {'dataset_id':1})
-        datasetIds = list(set(datasetIds).union(set([item['dataset_id'] for item in datasetsSearch])))
+    if query_string:
+        if include_samples_query:
+            # perform text search in both datasets and samples and use union
+            sampleSearch = database["samples"].find({'$text': {'$search':query_string}}, {'dataset_id':1})
+            datasetIds = [item['dataset_id'] for item in sampleSearch]
+            datasetsSearch = database["datasets"].find({'$text': {'$search':query_string}}, {'dataset_id':1})
+            datasetIds = list(set(datasetIds).union(set([item['dataset_id'] for item in datasetsSearch])))
+            if len(datasetIds)==0:
+                params['dataset_id']["$in"] = []
+        else:  # otherwise it's been done already above
+            params['$text'] = {"$search": query_string}
 
     if organism and organism!='all':  # restrict datasets to samples with this organism
         sampleSearch = database["samples"].find({'organism': organism}, {'dataset_id':1})
@@ -110,8 +115,6 @@ def datasetMetadataFromQuery(**kwargs):
         params["status"] = status
     if name:
         params["name"] = name
-    if query_string and not include_samples_query:  # otherwise it's been done already above
-        params['$text'] = {"$search": query_string}
     
     if limit:
         cursor = database["datasets"].find(params, attributes).limit(limit)
@@ -493,22 +496,24 @@ def test_samples():
 
 def test_expressionFilepath():
     ds = Dataset(6003)
-    print(ds.expressionFilePath(key='raw'))
-    print(ds.expressionFilePath(key='genes'))
-    print(ds.expressionFilePath(key='genes', hdf5=True))
+    assert os.path.basename(ds.expressionFilePath(key='raw'))=='6003.raw.tsv'
+    assert os.path.basename(ds.expressionFilePath(key='genes'))=='6003.genes.tsv'
+    assert os.path.basename(ds.expressionFilePath(key='genes', hdf5=True))=='6003.genes.h5'
     ds = Dataset(7419)
-    print(ds.expressionFilePath(key='raw'))
-    print(ds.expressionFilePath(key='genes'))
-    print(ds.expressionFilePath(key='raw', hdf5=True))
-    print(ds.expressionFilePath(hdf5=True))
+    assert os.path.basename(ds.expressionFilePath(key='raw'))=='7419.raw.tsv'
+    assert os.path.basename(ds.expressionFilePath(key='genes'))=='7419.raw.tsv'
+    assert os.path.basename(ds.expressionFilePath(key='raw', hdf5=True))=='7419.genes.h5'
+    assert os.path.basename(ds.expressionFilePath(hdf5=True))=='7419.genes.h5'
 
 def test_datasetMetadataFromQuery():
+    df = datasetMetadataFromQuery(query_string='xdfdfdx', include_samples_query=True)
+    assert df.shape==(0,0)
     datasetIds = datasetMetadataFromQuery(dataset_id=[2000,_exclude_list[0]], ids_only=True)
     assert datasetIds==[2000]
     df = datasetMetadataFromQuery()
     assert len(set(_exclude_list).intersection(set(df.index)))==0
     df = datasetMetadataFromQuery(query_string='abud', include_samples_query=True)
-    print(df.shape)
+    assert df.shape==(1,12)
 
 def test_expression():
     df = Dataset(2000).expressionMatrix(key='raw')

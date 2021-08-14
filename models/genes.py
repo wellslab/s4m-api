@@ -19,7 +19,7 @@ import requests, os, pandas, numpy, json, anndata
 from models import datasets
 from models.utilities import mongoClient
 
-def sampleGroupToGenes(sampleGroup, sampleGroupItem, sampleGroupItem2=None, cutoff=20):
+def sampleGroupToGenes(sampleGroup, sampleGroupItem, sampleGroupItem2=None, cutoff=20, scoringMethod='max'):
     """Given a sampleGroup and sampleGroupItem, (eg cell_type=monocyte), loop through each dataset which
     contains this sample and calculate genes for high expression.
     """
@@ -57,9 +57,14 @@ def sampleGroupToGenes(sampleGroup, sampleGroupItem, sampleGroupItem2=None, cuto
         # Calculate the difference between mean of sampleGroupItem samples vs max of other in sampleGroup
         df1 = exp[samples[samples[sampleGroup]==sampleGroupItem].index].mean(axis=1)
         if sampleGroupItem2 is None: 
-            df2 = exp[samples[samples[sampleGroup]!=sampleGroupItem].index].max(axis=1)
+            sampleIds = samples[samples[sampleGroup]!=sampleGroupItem].index
         else:
-            df2 = exp[samples[samples[sampleGroup]==sampleGroupItem2].index].max(axis=1)
+            sampleIds = samples[samples[sampleGroup]==sampleGroupItem2].index
+
+        if scoringMethod=='max': 
+            df2 = exp[sampleIds].max(axis=1)
+        else:
+            df2 = exp[sampleIds].mean(axis=1)
         diff = df1 - df2
 
         # Only keep +ve scores
@@ -99,11 +104,11 @@ def sampleGroupToGenes(sampleGroup, sampleGroupItem, sampleGroupItem2=None, cuto
     return {'rankScore':df, 'totalDatasets':len(uniqueDatasetIds)}
 
 def geneToSampleGroups(geneId, sampleGroup='cell_type'):
-    # filepath = '/mnt/stemformatics-data/backups/gene_to_sample_groups.h5ad'
-    # ada = anndata.AnnData(obsm=pandas.DataFrame(columns=['cell_type', 'datasetId']))
-    # ada.write(filepath)
-    # return
-    # ada = anndata.read_h5ad(filepath)
+    """Given a gene, loop through all datasets and calculate expression score for items in sampleGroup.
+    The score is calculated by first calculating mean of all samples in that sampleGroup, then subtracting
+    the median of these values and only keeping positive values. Variance filtering is also applied
+    where a dataset with variance of means <1 are not considered. 
+    """
 
     # Restrict to public human datasets, Microarray and RNASeq only
     allDatasetIds = datasets.publicDatasetIds()
