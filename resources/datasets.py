@@ -184,9 +184,11 @@ class DatasetSearch(Resource):
         parser.add_argument('name', type=str, required=False)  # fetch dataset by name
         parser.add_argument('organism', type=str, required=False, default="homo sapiens")  # use 'all' to fetch all organisms
 
-        # output control
-        parser.add_argument('format', type=str, required=False)  # ['sunburst1','sunburst2']
-        parser.add_argument('limit', type=int, required=False)  # limit the total number of search results
+        # sunburst specific
+        parser.add_argument('sunburst_inner', type=str, required=False)  # sample group for inner wheel of sunburst
+        parser.add_argument('sunburst_outer', type=str, required=False)  # sample group for outer wheel of sunburst
+        parser.add_argument('sunburst_inner_cutoff', type=int, required=False, default=12)  # max number of
+        parser.add_argument('sunburst_outer_cutoff', type=int, required=False, default=8)  # max number of
 
         # filtering
         parser.add_argument('include_samples_query', type=str, required=False, default="False")
@@ -199,9 +201,10 @@ class DatasetSearch(Resource):
         parser.add_argument('sort_field', type=str, required=False, default="name")
         parser.add_argument('sort_ascending', type=str, required=False, default="True")
 
-        # pagination
+        # pagination and limit
         parser.add_argument('pagination_limit', type=int, required=False)  # leave as None if not requiring pagination
         parser.add_argument('pagination_start', type=int, required=False, default=0)  # start page
+        parser.add_argument('limit', type=int, required=False)  # limit the total number of search results
         args = parser.parse_args()
 
         publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
@@ -216,11 +219,9 @@ class DatasetSearch(Resource):
                                                include_samples_query=args.get("include_samples_query").lower().startswith('t'))
         samples = datasets.samplesFromDatasetIds(df.index.tolist())
 
-        if args.get('format')=='sunburst1':  # Returns sunburst plot data, rather than dataset + samples data
-            df = datasets.sunburstData(samples)
-            return df.reset_index().to_dict(orient='list')
-        elif args.get('format')=='sunburst2': 
-            df = datasets.sunburstData(samples, parentKey='tissue_of_origin', childKey='cell_type')
+        if args.get('sunburst_inner') and args.get('sunburst_outer'):  # Returns sunburst plot data, rather than dataset + samples data
+            df = datasets.sunburstData(samples, parentKey=args.get('sunburst_inner'), childKey=args.get('sunburst_outer'),
+                                       parentCutoff=args.get('sunburst_inner_cutoff'), childCutoff=args.get('sunburst_outer_cutoff'))
             return df.reset_index().to_dict(orient='list')
                     
         # Add sample related columns

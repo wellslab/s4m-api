@@ -161,15 +161,16 @@ def allValues(collection, key, includeCount=False, public_only=True, excludeData
     else:
         return set(values)
 
-def sunburstData(dataFrame, childKey='final_cell_type', parentKey='parental_cell_type',
-                   parentCutoff=12, childCutoff=16, sep='_', includeOther=False):
+def sunburstData(samples, childKey='final_cell_type', parentKey='parental_cell_type',
+                   parentCutoff=12, childCutoff=8, sep='_', includeOther=False):
     """Return a pandas DataFrame that can be used as input to sunburst plot.
+    samples is a samples table (in same format as Dataset.samples()).
     """
-    topParents = dataFrame[parentKey].value_counts()[:parentCutoff].index
+    topParents = samples[parentKey].value_counts().sort_values(ascending=False)[:parentCutoff].index
     
     # Find children with highest numbers from topParent
-    df = dataFrame[dataFrame[parentKey].isin(topParents)]
-    children = df[childKey].value_counts()[:childCutoff].index
+    df = samples[samples[parentKey].isin(topParents)]
+    children = df[childKey].value_counts().sort_values(ascending=False)[:childCutoff].index
                 
     subset = df if includeOther else df[df[childKey].isin(children)]
     # If a parent has only one child, remove this key
