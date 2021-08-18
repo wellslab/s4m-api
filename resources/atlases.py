@@ -14,13 +14,14 @@ class Atlas(Resource):
         parser = reqparse.RequestParser()
         parser.add_argument('version', type=str, required=False)
         parser.add_argument('orient', type=str, required=False, default="records")
-        parser.add_argument('filtered', type=bool, required=False, default=False)
+        parser.add_argument('filtered', type=str, required=False, default='false')
         parser.add_argument('query_string', type=str, required=False, default="")
         parser.add_argument('gene_id', type=str, required=False)  # comma separated list of strings
         parser.add_argument('as_file', type=bool, required=False, default=False)
         args = parser.parse_args()
 
         atlas = atlases.Atlas(atlasType, version=args.get('version'))
+        filtered = args.get('filtered').lower().startswith('t')
         if item=="coordinates":
             df = atlas.pcaCoordinates()
             filepath = os.path.join(atlas.atlasFilePath, "coordinates.tsv")
@@ -31,10 +32,10 @@ class Atlas(Resource):
 
         elif item=="expression-values":  # subset expression matrix on gene ids specified
             geneIds = args.get('gene_id').split(',') if args.get('gene_id') is not None else []
-            df = atlas.expressionMatrix(filtered=args.get('filtered')).loc[geneIds]
+            df = atlas.expressionMatrix(filtered=filtered).loc[geneIds]
         
         elif item=="expression-file":  # this is served as a file download regardless of as_file flag
-            filepath = atlas.expressionFilePath(filtered=args.get('filtered'))
+            filepath = atlas.expressionFilePath(filtered=filtered)
             args['as_file'] = True
 
         elif item=="genes":  # also served as a file download regardless of as_file flag
