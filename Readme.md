@@ -1,3 +1,27 @@
+# Stemformatics API Server
+
+## Building the environment
+conda is used for the environment
+
+```bash
+conda install -c conda-forge flask-restful
+conda install flask-cors
+conda install flask-bcrypt
+conda install pymongo
+conda install nose
+conda install -c conda-forge python-dotenv
+conda install pandas
+conda install pyjwt
+conda install scp
+conda install requests
+conda install waitress
+
+conda install pytables
+conda install -c conda-forge anndata
+```
+
+## Notes
+
 Project template described [here](https://flask-restful.readthedocs.io/en/latest/intermediate-usage.html) has been used to create the structure in this project.
 
 API via python requests
@@ -18,19 +42,5 @@ response = make_response(df.to_json(orient=args.get('orient')))
 response.headers['content-type'] = 'application/octet-stream'
 return response
 ```
-
-conda install waitress
-conda install -c conda-forge flask-restful
-conda install pymongo
-conda install nose
-conda install -c conda-forge python-dotenv
-conda install pandas
-conda install flask-cors
-conda install pyjwt
-conda install flask-bcrypt
-conda install scp
-conda install requests
-conda install pytables
-conda install -c conda-forge anndata
 
 nohup waitress-serve --port=5000 app:app > app.log 2>&1 &

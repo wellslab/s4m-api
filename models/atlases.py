@@ -17,8 +17,11 @@ Examle usage:
 atlas = Atlas('myeloid')
 print(atlas.pcaCoordinates().head())
 """
-import os, pandas, json
+import os, pandas, json, numpy
 
+# ----------------------------------------------------------
+# Functions
+# ----------------------------------------------------------
 def rankTransform(df):
     """Return a rank transformed version of data frame
     """
@@ -32,14 +35,21 @@ def atlasTypes():
     os.chdir(os.environ['ATLAS_FILEPATH'])
     dictToReturn = {}
     filelist = os.listdir()
-    for atype in ['myeloid','blood','dc']:
+    for atype in Atlas.all_atlas_types:
         dirlist = sorted([item for item in filelist if item.startswith('%s_' % atype)], reverse=True) # so we can ignore symlink
         dictToReturn[atype] = {'current_version': os.readlink(atype).split('_')[1],
                                'versions': [item.split('_')[1] for item in dirlist],
                                'release_notes': [open(os.path.join(item, 'Readme.txt')).read() for item in dirlist]}
     return dictToReturn
 
+# ----------------------------------------------------------
+# Atlas class
+# ----------------------------------------------------------
 class Atlas(object):
+    """Main class representing an atlas in Stemformatics.
+    The atlas type specified at initialisation will be used to access the text files
+    which reside under the correponding os.environ['ATLAS_FILEPATH'] directory.
+    """
 
     # Full list of current atlas types
     all_atlas_types = ['myeloid','blood','dc']
@@ -164,6 +174,45 @@ class Atlas(object):
 
         return result
 
+    def capybara(self, query, anno):
+        """
+        Implementation of https://www.biorxiv.org/content/10.1101/2020.02.17.947390v1.full.pdf
+        Run like this: self.capybara(external expression dataframe, annotations['Cell Type'])
+        
+        Parameters
+        ----------         
+        query
+            Gene expression dataframe of atlas data that will be classified. Index (genes) should match atlas
+        anno
+            Series that contains categories to classify into. E.g. annotations['Cell Type']
+        """
+        
+        from cvxopt import matrix, solvers
+        solvers.options['show_progress'] = False
+        df = self.expressionMatrix(filtered=True)
+        df = df[anno.index]
+        query = query.loc[df.index.intersection(query.index)]
+        df = df.loc[query.index]
+
+        n = anno.unique().shape[0]
+        reference = pandas.DataFrame(index=anno.unique(), columns=df.index)
+        for i_celltype in anno.unique():
+            reference.loc[i_celltype,:] = df.loc[:,anno==i_celltype].mean(axis=1)
+        P = matrix(reference.dot(reference.transpose()).values.astype(numpy.double))
+        G = matrix(0.0, (n,n))
+        G[::n+1] = -1.0
+        h = matrix(0.0, (n,1))
+        A = matrix(1.0, (1,n))
+        b = matrix(1.0)
+        cell_score = pandas.DataFrame(columns=anno.unique(), index=query.columns)
+        for i in range(query.shape[1]):
+            y = -1.0*query.iloc[:,i].values.astype(numpy.double)
+            q = matrix(numpy.matmul(reference.values, y).astype(numpy.double))
+            solution = solvers.qp(P, q, G, h, A, b, show_progress=False)
+            cell_score.iloc[i,:] = numpy.array(solution['x']).reshape(-1)
+        
+        return cell_score
+
 # ----------------------------------------------------------
 # tests: eg. $nosetests -s <filename>:ClassName.func_name
 # ----------------------------------------------------------
@@ -212,13 +261,16 @@ def test_projection():
     ds = datasets.Dataset(2000)
     df = ds.expressionMatrix(key='genes')
     res = atlas.projection('test', df, includeCombinedCoords=False)
-    print(res)
+    assert res['coords'].shape == (124,3)
 
-def test_version():
-    atlas = Atlas('dc', version='1.2')
-    print(atlas.atlasFilePath, atlas.version)
+def test_capybara():
+    from models import datasets
     atlas = Atlas('dc')
-    print(atlas.atlasFilePath, atlas.version)
+    ds = datasets.Dataset(2000)
+    df = ds.expressionMatrix(key='genes')
+    samples = atlas.sampleMatrix()
+    output = atlas.capybara(df, samples['Cell Type'])
+    print(output.head())
 
 def reorderSampleColumns():
     atlas = Atlas('myeloid')

@@ -1,6 +1,6 @@
 from flask import Flask
 from flask_restful import Api
-from flask_cors import CORS
+#from flask_cors import CORS
 import os, logging
 
 # Load environment vars in .env file. Even though load_dotenv function call is not even necessary
@@ -36,7 +36,7 @@ api.add_resource(datasets.DatasetTtest, '/datasets/<int:datasetId>/ttest')
 api.add_resource(datasets.DatasetSearch, '/search/datasets')
 api.add_resource(datasets.SampleSearch, '/search/samples')
 
-# Get available values
+# Get available values eg: /values/samples/cell_type
 api.add_resource(datasets.Values, '/values/<collection>/<key>')
 
 # Download multiple datasets

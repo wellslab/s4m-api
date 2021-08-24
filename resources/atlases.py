@@ -72,7 +72,7 @@ class AtlasTypes(Resource):
 
 class AtlasProjection(Resource):
     def post(self, atlasType, dataSource):
-        """dataSource is either Stemformatics or User
+        """Project data onto the atlas of atlasType. dataSource is one of  ['Stemformatics','User'].
         """
         try:
             parser = reqparse.RequestParser()
