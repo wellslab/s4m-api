@@ -86,13 +86,19 @@ class AtlasProjection(Resource):
 
             if dataSource=="Stemformatics":
                 name = args.get('name').split("_")[0] # only take the author name for this
-                column = 'cell_type'
                 # Find dataset with same name from Stemformatics
                 publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
-                dsIds = datasets.datasetMetadataFromQuery(name=args.get('name'), public_only=publicOnly, ids_only=True)
-                ds = datasets.Dataset(dsIds[0])  # should be one matching dataset
+                dsId = datasets.datasetIdFromName(args.get('name'), publicOnly=publicOnly)
+                ds = datasets.Dataset(dsId)
                 df = ds.expressionMatrix(key="genes" if ds.metadata()['platform_type']=='Microarray' else "raw")
                 samples = ds.samples()
+                # Select column to use - best column may not be cell_type though
+                column = 'cell_type'
+                for col in ['cell_type','sample_type','final_cell_type']:
+                    if len(samples[col].unique())>=2:  # use this
+                        column = col
+                        break
+                samples = samples.fillna('[not assigned]')
 
             else:
                 name = args.get('test_name')
@@ -122,6 +128,8 @@ class AtlasProjection(Resource):
             result["column"] = column
             if "combinedCoords" in result:
                 result["combinedCoords"] = result["combinedCoords"].to_dict(orient="split")
+            if "capybara" in result:
+                result["capybara"] = result["capybara"].to_dict(orient="split")
                 
             return result
             

@@ -1,0 +1,86 @@
+# Just a place to dump various code and info
+
+def datasetMetadataFromQuery(**kwargs):
+    """Return DataFrame of dataset metadata which match a query. Rows will have dataset ids,
+    while columns will be attributes of dataset metadata. Use this instead of Dataset instance
+    for fetching large numbers of datasets.
+
+    If ids_only=True, only a list of dataset ids will be returned, instead of a DataFrame.
+    Note that query_string will search samples collection as well if include_samples_query=true.
+
+    Use datasetMetadataFromQuery() to fetch all datasets.
+    """
+    limit = kwargs.get("limit")
+    ids_only = kwargs.get('ids_only', False)
+    public_only = kwargs.get("public_only", True)
+    include_samples_query = kwargs.get("include_samples_query", False)
+
+    dataset_id = kwargs.get("dataset_id") # list of dataset ids specified in the query
+    name = kwargs.get("name")
+    query_string = kwargs.get("query_string")
+    platform_type = kwargs.get("platform_type")
+    projects = kwargs.get("projects")
+    organism = kwargs.get("organism")
+    status = kwargs.get("status")
+    
+    # params for find function (ie. fetch all records matching params) and attributes for what to return
+    params = {'dataset_id': {"$nin": _exclude_list}}
+    attributes = {"dataset_id":1, "_id":0} if ids_only==True else {"_id":0}
+
+    if public_only:
+        params['private'] = False
+
+    datasetIds = []  # this is additional dataset ids to search, based on sample search
+    searched = False    # need to know if datasetIds becomes empty again after performing searches
+    if query_string:
+        if include_samples_query:
+            # perform text search in both datasets and samples and use union
+            sampleSearch = database["samples"].find({'$text': {'$search':query_string}}, {'dataset_id':1})
+            datasetIds = [item['dataset_id'] for item in sampleSearch]
+            datasetsSearch = database["datasets"].find({'$text': {'$search':query_string}}, {'dataset_id':1})
+            datasetIds = list(set(datasetIds).union(set([item['dataset_id'] for item in datasetsSearch])))
+            if len(datasetIds)==0:
+                params['dataset_id']["$in"] = []
+        else:  # otherwise it's been done already above
+            params['$text'] = {"$search": query_string}
+        searched = True
+
+    if organism and organism!='all':  # restrict datasets to samples with this organism
+        sampleSearch = database["samples"].find({'organism': organism}, {'dataset_id':1})
+        datasetIds = list(set(datasetIds).intersection(set([item['dataset_id'] for item in sampleSearch])))
+        searched = True
+    
+    if dataset_id is not None and len(datasetIds)>0:  # find common dataset ids
+        datasetIds = list(set(datasetIds).intersection(set([int(item) for item in dataset_id])))
+    elif dataset_id is not None and len(datasetIds)==0: # just specified by parameter
+        datasetIds = [int(item) for item in dataset_id]
+    
+    if len(datasetIds)>0:
+        params['dataset_id']["$in"] = datasetIds
+    else:
+        if searched: # after searching we found no matching datasets
+            return [] if ids_only else pandas.DataFrame()
+
+    if platform_type: 
+        # assume a list of platform types supplied if there's a comma
+        params['platform_type'] = {"$in": platform_type.split(',')} if ',' in platform_type else platform_type
+
+    if projects:
+        if projects=='atlas':  # any atlas project
+            params["projects"] = {"$in":["%s_atlas" % atlasType for atlasType in Atlas.all_atlas_types]}
+        else:
+            params["projects"] = {"$in":[projects]}
+    if status:
+        params["status"] = status
+    if name:
+        params["name"] = name
+    
+    if limit:
+        cursor = database["datasets"].find(params, attributes).limit(limit)
+    else:
+        cursor = database["datasets"].find(params, attributes)
+
+    if ids_only:
+        return [item["dataset_id"] for item in cursor]
+    else:
+        return pandas.DataFrame(cursor).set_index("dataset_id") if cursor.count()!=0 else pandas.DataFrame()

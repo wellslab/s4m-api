@@ -35,7 +35,8 @@ class DatasetSummary(Governance):
         parser.add_argument('status', type=str, required=False, default='pending')
         args = parser.parse_args()
 
-        df = datasets.datasetMetadataFromQuery(status=args.get('status'), public_only=False)
+        status = args.get('status').split(',') if args.get('status') else []
+        df = datasets.datasetMetadataFromDatasetIds(datasets.datasetIdsFromFields(status=status, publicOnly=False), publicOnly=False)
         return df.sort_index().reset_index().fillna('').to_dict(orient='records')
 
 class DatasetReport(Governance):

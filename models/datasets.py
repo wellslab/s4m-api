@@ -29,7 +29,7 @@ from models.atlases import Atlas
 database = mongoClient()["dataportal"]
 
 # These datasets have entries in the metadata table but are not ready to be exposed to the public - such as 6131, 
-# which is not in the normal format. Hence by default, datasetMetadataFromQuery() function here 
+# which is not in the normal format. Hence by default, datasetMetadataFromDatasetIds() function here 
 # will exclude this hard coded list of datasets. You can still access these by using Dataset() initialiser.
 _exclude_list = [5002, 6056, 6127, 6130, 6131, 6149, 6150, 6151, 6155, 6187, 6197, 6198, 6368, 6655, 6701, 6754, 6776, 6948, 7012, 7115, 7209, 7217, 7218, 7250, 7311, 7401]
 
@@ -41,90 +41,96 @@ def cpm(df):
     """
     return (df * 1000000).div(df.sum(axis = 0), axis = 1)
 
-def publicDatasetIds(organism='homo sapiens', platform_type='Microarray,RNASeq'):
-    """Shortcut for the most common query we make in the system for datasets
-    """
-    return datasetMetadataFromQuery(ids_only=True, public_only=True, organism=organism, platform_type=platform_type)
-
-def datasetMetadataFromQuery(**kwargs):
-    """Return DataFrame of dataset metadata which match a query. Rows will have dataset ids,
+def datasetMetadataFromDatasetIds(datasetIds, publicOnly=True):
+    """Given a list of dataset ids, return a DataFrame where rows will be dataset ids,
     while columns will be attributes of dataset metadata. Use this instead of Dataset instance
-    for fetching large numbers of datasets.
-
-    If ids_only=True, only a list of dataset ids will be returned, instead of a DataFrame.
-    Note that query_string will search samples collection as well if include_samples_query=true.
-
-    Use datasetMetadataFromQuery() to fetch all datasets.
+    for fetching large numbers of datasets. Also the most "primitive" of all datasetMetadata
+    functions here, in the sense that all the others will call this after working out the
+    dataset ids first.
     """
-    limit = kwargs.get("limit")
-    ids_only = kwargs.get('ids_only', False)
-    public_only = kwargs.get("public_only", True)
-    include_samples_query = kwargs.get("include_samples_query", False)
-
-    dataset_id = kwargs.get("dataset_id",[]) # list of dataset ids specified in the query
-    if dataset_id is None: dataset_id = []
-    name = kwargs.get("name")
-    query_string = kwargs.get("query_string")
-    platform_type = kwargs.get("platform_type")
-    projects = kwargs.get("projects")
-    organism = kwargs.get("organism")
-    status = kwargs.get("status")
-    
-    # params for find function (ie. fetch all records matching params) and attributes for what to return
-    params = {'dataset_id': {"$nin": _exclude_list}}
-    attributes = {"dataset_id":1, "_id":0} if ids_only==True else {"_id":0}
-
-    if public_only:
+    params = {'dataset_id': {"$nin": _exclude_list, "$in":datasetIds}}
+    if publicOnly:
         params['private'] = False
+    cursor = database["datasets"].find(params, {"_id":0})
+    return pandas.DataFrame(cursor).set_index("dataset_id") if cursor.count()>0 else pandas.DataFrame()
 
-    datasetIds = []  # this is additional dataset ids to search, based on sample search
-    if query_string:
-        if include_samples_query:
-            # perform text search in both datasets and samples and use union
-            sampleSearch = database["samples"].find({'$text': {'$search':query_string}}, {'dataset_id':1})
-            datasetIds = [item['dataset_id'] for item in sampleSearch]
-            datasetsSearch = database["datasets"].find({'$text': {'$search':query_string}}, {'dataset_id':1})
-            datasetIds = list(set(datasetIds).union(set([item['dataset_id'] for item in datasetsSearch])))
-            if len(datasetIds)==0:
-                params['dataset_id']["$in"] = []
-        else:  # otherwise it's been done already above
-            params['$text'] = {"$search": query_string}
+def datasetIdsFromQuery(query_string, include_samples_query=False):
+    """Return dataset ids which match a query.
+    Note that samples collection will be searched as well if include_samples_query=true.
+    Use datasetIdsFromQuery('*') to fetch all dataset ids (including private dataset ids)
+    """
+    # params for find function (ie. fetch all records matching params) and attributes for what to return
+    params = {} if query_string=='*' else {'$text': {'$search':query_string}}
+    datasetIds = []
 
-    if organism and organism!='all':  # restrict datasets to samples with this organism
-        sampleSearch = database["samples"].find({'organism': organism}, {'dataset_id':1})
-        datasetIds = list(set(datasetIds).intersection(set([item['dataset_id'] for item in sampleSearch])))
+    if include_samples_query:
+        # perform text search in both datasets and samples and use union
+        sampleSearch = database["samples"].find(params, {'dataset_id':1})
+        datasetIds = [item['dataset_id'] for item in sampleSearch]
 
-    if len(dataset_id)>0 and len(datasetIds)>0:  # find common dataset ids
-        datasetIds = list(set(datasetIds).intersection(set([int(item) for item in dataset_id])))
-    elif len(dataset_id)>0 and len(datasetIds)==0: # just specified by parameter
-        datasetIds = [int(item) for item in dataset_id]
+    datasetsSearch = database["datasets"].find(params, {'dataset_id':1})
+    return list(set(datasetIds).union(set([item['dataset_id'] for item in datasetsSearch])))
+
+def datasetIdsFromFields(platform_type=[], projects=[], organism=['homo sapiens'], status=[], publicOnly=True):
+    """Return dataset ids which match values specified. The query is an 'and' query for all fields.
+    Call the function with default values to get all public human datasets.
+    """
+    # Get dataset ids matching organism first
+    datasetIds = None
+    if len(organism)>0 and 'all' not in organism:  # restrict datasets to samples with this organism
+        sampleSearch = database["samples"].find({'organism': {'$in':organism}}, {'dataset_id':1})
+        datasetIds = set([item['dataset_id'] for item in sampleSearch])
     
-    if len(datasetIds)>0:
-        params['dataset_id']["$in"] = datasetIds
+    if datasetIds is None or len(datasetIds)>0: # Get dataset ids matching other fields
+        params = {}
+        if len(platform_type)>0:
+            params['platform_type'] = {"$in": platform_type}
+        if len(projects)>0:
+            if projects==['atlas']:  # any atlas project
+                params["projects"] = {"$in":["%s_atlas" % atlasType for atlasType in Atlas.all_atlas_types]}
+            else:
+                params["projects"] = {"$in":projects}
+        if publicOnly:
+            params['private'] = False
 
-    if platform_type: 
-        # assume a list of platform types supplied if there's a comma
-        params['platform_type'] = {"$in": platform_type.split(',')} if ',' in platform_type else platform_type
+        if params:
+            cursor = database["datasets"].find(params, {"dataset_id":1, "_id":0})
+            ids = set([item["dataset_id"] for item in cursor])
+            datasetIds = ids if datasetIds is None else datasetIds.intersection(ids)
 
-    if projects:
-        if projects=='atlas':  # any atlas project
-            params["projects"] = {"$in":["%s_atlas" % atlasType for atlasType in Atlas.all_atlas_types]}
-        else:
-            params["projects"] = {"$in":[projects]}
-    if status:
-        params["status"] = status
-    if name:
-        params["name"] = name
-    
+    return [] if datasetIds is None else list(datasetIds)
+
+def datasetIdFromName(name, publicOnly=True):
+    params = {'name':name}
+    if publicOnly:
+        params['private'] = False
+    cursor = database["datasets"].find(params, {"dataset_id":1, "_id":0})
+    return [item['dataset_id'] for item in cursor][0] if cursor.count()>0 else None
+
+def samplesFromQuery(datasetIds=[], queryString="", organism=["homo sapiens"], limit=100, publicOnly=True):
+    """Return a pandas DataFrame containing sample table which match the query.
+    """    
+    params = {}
+    if queryString and queryString!='*':
+        params['$text'] = {'$search':queryString}
+    if datasetIds:
+        params['dataset_id'] = {'$in':datasetIds}
+    if organism and 'all' not in organism:
+        params['organism'] = {'$in':organism}
+
     if limit:
-        cursor = database["datasets"].find(params, attributes).limit(limit)
+        cursor = database["samples"].find(params, {'_id':0}).limit(limit)
     else:
-        cursor = database["datasets"].find(params, attributes)
+        cursor = database["samples"].find(params, {'_id':0})
+
+    df = pandas.DataFrame(cursor).set_index("sample_id") if cursor.count()>0 else pandas.DataFrame()
     
-    if ids_only:
-        return [item["dataset_id"] for item in cursor]
-    else:
-        return pandas.DataFrame(cursor).set_index("dataset_id") if cursor.count()!=0 else pandas.DataFrame()
+    if publicOnly and len(df)>0:  # subset df based on dataset property
+        cursor = database["datasets"].find({'private':False}, {"dataset_id":1, "_id":0})
+        ids = [item['dataset_id'] for item in cursor]
+        df = df[df['dataset_id'].isin(ids)]
+
+    return df
 
 def samplesFromDatasetIds(datasetIds):
     """Return DataFrame of samples which belong to datasets with datasetIds.
@@ -133,18 +139,21 @@ def samplesFromDatasetIds(datasetIds):
     cursor = database["samples"].find(params, {"_id":0})
     return pandas.DataFrame(cursor).set_index("sample_id") if cursor.count()!=0 else pandas.DataFrame()
 
-def allValues(collection, key, includeCount=False, public_only=True, excludeDatasets=[], organism='homo sapiens'):
+def allValues(collection, key, includeCount=False, public_only=True, organism='homo sapiens', excludeDatasets=[]):
     """Return a set of all the values for a key in a collection.
     Eg: allValues("samples", "sex") returns {'', 'female', 'male'}
     If includeCount is True, returns a pandas Series that includes count of each value.
     excludeDatasets can be a list of dataset ids to exclude explicitly from getting these values.
     """
-    params = {}
-    if public_only:
-        params = {"dataset_id": {"$in": datasetMetadataFromQuery(ids_only=True, public_only=True, organism=organism)}}
+    # datasets with matching public_only and organism
+    datasetIds = datasetIdsFromFields(publicOnly=public_only, organism=organism.split(','))
+    if len(datasetIds)==0: # must be due to organism not matching
+        return pandas.Series([]) if includeCount else set()
+    params = {'dataset_id':{'$in':datasetIds}} if organism else {}
 
+    # Make query for key
     cursor = database[collection].find(params, {key:1, "dataset_id":1, "_id":0})
-
+    
     # Deal with excludeDatasets
     values = [item.get(key) for item in cursor if len(excludeDatasets)==0 or item['dataset_id'] not in excludeDatasets]
 
@@ -214,8 +223,9 @@ def dataAsZipfile(datasetIds, publicOnly=True):
     # Create a name for the zip file using string and numpy.random
     randString = ''.join(numpy.random.choice(list(string.ascii_lowercase), size=5))
 
-    # Dataset ids to focus on
-    datasetIds = datasetMetadataFromQuery(dataset_id=datasetIds, ids_only=True, public_only=True)
+    # Filter out any
+    if publicOnly:
+        datasetIds = set(datasetIds).intersection(set(datasetIdsFromFields(organism=['all'], publicOnly=publicOnly)))
 
     # Write to file
     filepath = '/tmp/s4m_zipfile_%s.zip' % randString
@@ -239,7 +249,7 @@ def sampleSummaryTable():
     Work in progress...
     """
     # Focus on these datasets
-    datasetIds = datasetMetadataFromQuery(ids_only=True, public_only=True)
+    datasetIds = datasetIdsFromFields()
 
     # Part 1: Count most commonly used cell type values. Since we don't have a very complete sample annotation
     # use the following fields as synonyms to collect together
@@ -488,6 +498,7 @@ class Dataset(object):
 
 def test_metadata():
     assert Dataset(2000).metadata()["name"] == "Matigian_2010_20699480"
+    print(Dataset(6864).metadata()['platform'])
 
 def test_samples():
     df = Dataset(6003).samples()
@@ -506,15 +517,30 @@ def test_expressionFilepath():
     assert os.path.basename(ds.expressionFilePath(key='raw', hdf5=True))=='7419.genes.h5'
     assert os.path.basename(ds.expressionFilePath(hdf5=True))=='7419.genes.h5'
 
-def test_datasetMetadataFromQuery():
-    df = datasetMetadataFromQuery(query_string='xdfdfdx', include_samples_query=True)
-    assert df.shape==(0,0)
-    datasetIds = datasetMetadataFromQuery(dataset_id=[2000,_exclude_list[0]], ids_only=True)
-    assert datasetIds==[2000]
-    df = datasetMetadataFromQuery()
-    assert len(set(_exclude_list).intersection(set(df.index)))==0
-    df = datasetMetadataFromQuery(query_string='abud', include_samples_query=True)
+def test_datasetMetadataFromDatasetIds():
+    df = datasetMetadataFromDatasetIds([2000, _exclude_list[0]])
     assert df.shape==(1,12)
+    df = datasetMetadataFromDatasetIds([])
+    assert df.shape==(0,0)
+
+def test_datasetIdsFromQuery():
+    datasetIds = datasetIdsFromQuery(query_string='xdfdfdx', include_samples_query=True)
+    assert len(datasetIds)==0
+    datasetIds = datasetIdsFromQuery('')
+    assert len(datasetIds)==0
+    datasetIds = datasetIdsFromQuery('*')
+    assert len(datasetIds)==661
+    datasetIds = datasetIdsFromQuery(query_string='abud', include_samples_query=True)
+    assert datasetIds==[7268]
+
+def test_datasetIdsFromFields():
+    datasetIds = datasetIdsFromFields()
+    assert len(datasetIds)==338
+    datasetIds = datasetIdsFromFields(organism=['mus musculus'])
+    assert len(datasetIds)==129
+
+def test_datasetIdFromName():
+    assert datasetIdFromName('Abud_2017_28426964')==7268
 
 def test_expression():
     df = Dataset(2000).expressionMatrix(key='raw')
@@ -539,7 +565,7 @@ def test_datasetMetadataVsDatasetLoadingTime():
     """
     import time
     t0 = time.time()
-    df = datasetMetadataFromQuery(limit=500)
+    df = datasetMetadataFromDatasetIds(datasetIdsFromQuery())
     print(df.shape, time.time()-t0)
     t1 = time.time()
     print(pandas.DataFrame.from_records([Dataset(datasetId).metadata() for datasetId in df.index]).shape, time.time()-t1)

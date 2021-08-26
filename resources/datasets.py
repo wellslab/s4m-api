@@ -28,7 +28,11 @@ class DatasetMetadata(Resource):
         """Return dataset metadata for a dataset with datasetId.
         """
         ds = protectedDataset(datasetId)
-        return ds.metadata()
+        # eliminate any nan, as this converts json to string
+        toReturn = {}
+        for key,val in ds.metadata().items():
+            toReturn[key] = '' if pandas.isnull(val) else val
+        return toReturn
 
 class DatasetSamples(Resource):
     def get(self, datasetId):
@@ -174,14 +178,15 @@ class DatasetSearch(Resource):
 
         """
         parser = reqparse.RequestParser()
+        
         # commonly used query keys
         parser.add_argument('dataset_id', type=str, required=False) # comma separated list of dataset ids
         parser.add_argument('query_string', type=str, required=False) # arbitrary query string - will perform text search
+        parser.add_argument('include_samples_query', type=str, required=False, default="False")
 
         # specific fields found in datasets and samples
         parser.add_argument('platform_type', type=str, required=False)
         parser.add_argument('projects', type=str, required=False)
-        parser.add_argument('name', type=str, required=False)  # fetch dataset by name
         parser.add_argument('organism', type=str, required=False, default="homo sapiens")  # use 'all' to fetch all organisms
 
         # sunburst specific
@@ -190,8 +195,13 @@ class DatasetSearch(Resource):
         parser.add_argument('sunburst_inner_cutoff', type=int, required=False, default=12)  # max number of
         parser.add_argument('sunburst_outer_cutoff', type=int, required=False, default=8)  # max number of
 
+        # for sunburst output format
+        parser.add_argument('sunburst_inner', type=str, required=False)  # sample group for inner wheel of sunburst
+        parser.add_argument('sunburst_outer', type=str, required=False)  # sample group for outer wheel of sunburst
+        parser.add_argument('sunburst_inner_cutoff', type=int, required=False, default=12)  # max number of inner items
+        parser.add_argument('sunburst_outer_cutoff', type=int, required=False, default=8)  # max number of outer items
+        
         # filtering
-        parser.add_argument('include_samples_query', type=str, required=False, default="False")
         parser.add_argument('filter_Project', type=str, required=False)
         parser.add_argument('filter_platform_type', type=str, required=False)
         parser.add_argument('filter_cell_type', type=str, required=False)
@@ -201,24 +211,39 @@ class DatasetSearch(Resource):
         parser.add_argument('sort_field', type=str, required=False, default="name")
         parser.add_argument('sort_ascending', type=str, required=False, default="True")
 
-        # pagination and limit
+        # pagination
         parser.add_argument('pagination_limit', type=int, required=False)  # leave as None if not requiring pagination
         parser.add_argument('pagination_start', type=int, required=False, default=0)  # start page
-        parser.add_argument('limit', type=int, required=False)  # limit the total number of search results
         args = parser.parse_args()
 
-        publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
-        df = datasets.datasetMetadataFromQuery(dataset_id=args.get("dataset_id").split(',') if args.get('dataset_id') is not None else [],
-                                               name=args.get("name"),
-                                               query_string=args.get("query_string"),
-                                               platform_type=args.get("platform_type"),
-                                               projects=args.get("projects"),
-                                               organism=args.get("organism"),
-                                               limit=args.get("limit"),
-                                               public_only=publicOnly,
-                                               include_samples_query=args.get("include_samples_query").lower().startswith('t'))
-        samples = datasets.samplesFromDatasetIds(df.index.tolist())
+        # When performing a search, we need to know if a parameter was never specified vs
+        # it was specified but returned zero results - because with former we make a union
+        # of results, whereas in the latter we make an intersection.
+        datasetIds = None  # becomes a list if a search has been performed
 
+        # search by arbitrary query string using text search
+        if args.get('query_string'):
+            datasetIds = set(datasets.datasetIdsFromQuery(args.get('query_string'), 
+                    include_samples_query=args.get('include_samples_query').lower().startswith('t')))
+        
+        # user specified list of dataset ids
+        if (datasetIds is None or len(datasetIds)>0) and args.get('dataset_id'):
+            ids = set([int(item) for item in args.get('dataset_id','').split(',')])
+            datasetIds = ids if datasetIds is None else datasetIds.intersection(ids)
+
+        # search by specific fields found in datasets and samples
+        platformType = args.get('platform_type').split(',') if args.get('platform_type') else []
+        projects = args.get('projects').split(',') if args.get('projects') else []
+        organism = args.get('organism').split(',') if args.get('organism') else []
+        if (datasetIds is None or len(datasetIds)>0) and (platformType or projects or organism):
+                ids = datasets.datasetIdsFromFields(platform_type=platformType, projects=projects, organism=organism)
+                datasetIds = ids if datasetIds is None else datasetIds.intersection(set(ids))
+
+        # When we fetch the data frame, apply public/private status
+        publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
+        df = datasets.datasetMetadataFromDatasetIds(list(datasetIds), publicOnly=publicOnly)
+        samples = datasets.samplesFromDatasetIds(df.index.tolist())
+        
         if args.get('sunburst_inner') and args.get('sunburst_outer'):  # Returns sunburst plot data, rather than dataset + samples data
             df = datasets.sunburstData(samples, parentKey=args.get('sunburst_inner'), childKey=args.get('sunburst_outer'),
                                        parentCutoff=args.get('sunburst_inner_cutoff'), childCutoff=args.get('sunburst_outer_cutoff'))
@@ -292,21 +317,23 @@ class SampleSearch(Resource):
         not recognised here have been specified, this will fetch data for all samples but a limit of 50 is imposed.
         """
         parser = reqparse.RequestParser()
+
+        # fields to restrict the search in
         parser.add_argument('dataset_id', type=str, required=False) # comma separated list of dataset ids
         parser.add_argument('query_string', type=str, required=False)
+        parser.add_argument('organism', type=str, required=False, default="homo sapiens")  # use 'all' to fetch all organisms
+
+        # output control
         parser.add_argument('field', type=str, required=False, default='')  # comma separated list of fields to include
         parser.add_argument('limit', type=int, required=False, default=50)
         parser.add_argument('orient', type=str, required=False, default='records')
-        parser.add_argument('organism', type=str, required=False, default="homo sapiens")  # use 'all' to fetch all organisms
         args = parser.parse_args()
 
+        datasetIds = args.get('dataset_id').split(',') if args.get('dataset_id') else []
         publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
-        df = datasets.datasetMetadataFromQuery(dataset_id=args.get("dataset_id").split(',') if args.get('dataset_id') is not None else [],
-                                               query_string=args.get("query_string"),
-                                               limit=args.get("limit"),
-                                               organism=args.get("organism"),                                               
-                                               public_only=publicOnly)
-        samples = datasets.samplesFromDatasetIds(df.index.tolist())
+        organism = args.get('organism').split(',') if args.get('organism') else []
+        samples = datasets.samplesFromQuery(datasetIds=datasetIds, queryString=args.get("query_string"), 
+                        organism=organism, limit=args.get("limit"), publicOnly=publicOnly)
 
         # subset columns of samples if specified
         commonCols = set(args.get('field').split(',')).intersection(set(samples.columns))
@@ -352,13 +379,10 @@ class Download(Resource):
         """
         parser = reqparse.RequestParser()
         parser.add_argument('dataset_id', type=str, required=True) # comma separated list of dataset ids
-        parser.add_argument('exclude_some_datasets', type=str, required=False, default="True")
         args = parser.parse_args()
 
         publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
         datasetIds = map(int, args.get('dataset_id').split(','))
-        if not args.get('exclude_some_datasets').lower().startswith('f'):
-            datasetIds = [id for id in datasetIds if id not in datasets._exclude_list]
         filepath = datasets.dataAsZipfile(datasetIds, publicOnly=publicOnly)
         filename = "Stemformatics_downloaded_datasets.zip"
         return send_from_directory(os.path.dirname(filepath), os.path.basename(filepath), as_attachment=True, attachment_filename=filename)

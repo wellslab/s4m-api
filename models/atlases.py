@@ -113,7 +113,7 @@ class Atlas(object):
         filepath = os.path.join(self.atlasFilePath, "colours.json")
         return json.loads(open(filepath).read()) if os.path.exists(filepath) else {}
 
-    def projection(self, name, testData, includeCombinedCoords=True):
+    def projection(self, name, testData, includeCombinedCoords=True, includeCapybara=True):
         """Perform projection of testData onto this atlas and return a dictionary of objects.
         Params:
             name (str): Name of the testData, used as prefix for projected points if includeCombinedCoords is True.
@@ -172,17 +172,23 @@ class Atlas(object):
             coords.columns = projectedCoords.columns
             result['combinedCoords'] = pandas.concat([coords, projectedCoords])
 
+        if includeCapybara:
+            result['capybara'] = self.capybara(testData, self.sampleMatrix()['Cell Type'])
+
         return result
 
-    def capybara(self, query, anno):
-        """
-        Implementation of https://www.biorxiv.org/content/10.1101/2020.02.17.947390v1.full.pdf
-        Run like this: self.capybara(external expression dataframe, annotations['Cell Type'])
+    def capybara(self, query, anno, rankNormalise=True):
+        """Calculates capybara score for each sample in query and return the result as a pandas DataFrame. 
+        Implementation of https://doi.org/10.1101/2020.02.17.947390
         
+        > self.capybara(external_expression_dataframe, self.sampleMatrix()['Cell Type']).
+        The returned DataFrame has columns of query as rows, and unique values of anno as columns.
+        So each value is the score of that query column against each unique value of anno.
+
         Parameters
         ----------         
         query
-            Gene expression dataframe of atlas data that will be classified. Index (genes) should match atlas
+            Gene expression dataframe of query data that will be classified.
         anno
             Series that contains categories to classify into. E.g. annotations['Cell Type']
         """
@@ -193,6 +199,9 @@ class Atlas(object):
         df = df[anno.index]
         query = query.loc[df.index.intersection(query.index)]
         df = df.loc[query.index]
+
+        if rankNormalise:
+            query = rankTransform(query)
 
         n = anno.unique().shape[0]
         reference = pandas.DataFrame(index=anno.unique(), columns=df.index)

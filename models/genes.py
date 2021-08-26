@@ -30,7 +30,7 @@ def sampleGroupToGenes(sampleGroup, sampleGroupItem, sampleGroupItem2=None, cuto
     datasetIds = [item['dataset_id'] for item in cursor]
 
     # Restrict to public human datasets, Microarray and RNASeq only
-    datasetIds = list(set(datasets.publicDatasetIds()).intersection(set(datasetIds)))
+    datasetIds = list(set(datasets.datasetIdsFromFields()).intersection(set(datasetIds)))
 
     # Get all samples for these datasetIds - quicker to make one mongo query than to loop through Dataset object
     cursor = mongoClient()["dataportal"]["samples"].find({'dataset_id': {'$in':datasetIds}}, {"_id":0})
@@ -111,7 +111,7 @@ def geneToSampleGroups(geneId, sampleGroup='cell_type'):
     """
 
     # Restrict to public human datasets, Microarray and RNASeq only
-    allDatasetIds = datasets.publicDatasetIds()
+    allDatasetIds = datasets.datasetIdsFromFields(platform_type=['Microarray','RNASeq'])
 
     # Also no need to look at cell types with only a few samples assigned to them
     #sampleCount = datasets.allValues('samples', sampleGroup, includeCount=True, excludeDatasets=datasets._exclude_list)
@@ -191,7 +191,7 @@ def createGeneset(msigName=None, name=None, geneSymbols=[], sampleGroupItem='cel
     # Loop through each dataset in the system
     scores = pandas.DataFrame(columns=['var','high','low','diff'])
     scores.index.name = 'datasetId'
-    allDatasets = datasets.datasetMetadataFromQuery(ids_only=True, organism='homo sapiens')
+    allDatasets = datasets.datasetIdsFromFields(platform_type=['Microarray','RNASeq'])
     for datasetId in allDatasets:
         ds = datasets.Dataset(datasetId)
         if not (ds.platformType()=='RNASeq' or ds.platformType()=='Microarray'): continue
