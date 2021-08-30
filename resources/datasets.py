@@ -31,7 +31,10 @@ class DatasetMetadata(Resource):
         # eliminate any nan, as this converts json to string
         toReturn = {}
         for key,val in ds.metadata().items():
-            toReturn[key] = '' if pandas.isnull(val) else val
+            if isinstance(val, list):   # some fields like projects is a list, rather than string
+                toReturn[key] = val
+            else:
+                toReturn[key] = '' if pandas.isnull(val) else val
         return toReturn
 
 class DatasetSamples(Resource):
@@ -296,7 +299,7 @@ class DatasetSearch(Resource):
             if args.get('filter_platform_type'):
                 df = df[df['platform_type']==args.get('filter_platform_type')]
             if args.get('filter_cell_type'):
-                df = df[[any(value in item for value in args.get('filter_cell_type').split(',')) for item in df['cell_type']]]
+                df = df[[any(value in item.split(',') for value in args.get('filter_cell_type').split(',')) for item in df['cell_type']]]
             if args.get('filter_tissue_of_origin'):
                 df = df[[any(value in item for value in args.get('filter_tissue_of_origin').split(',')) for item in df['tissue_of_origin']]]
 

@@ -173,7 +173,10 @@ class Atlas(object):
             result['combinedCoords'] = pandas.concat([coords, projectedCoords])
 
         if includeCapybara:
-            result['capybara'] = self.capybara(testData, self.sampleMatrix()['Cell Type'])
+            capy = self.capybara(testData, self.sampleMatrix()['Cell Type'])
+            # drop columns with very low values
+            cutoff = 0.01
+            result['capybara'] = capy[[col for col in capy.columns if capy[col].max()>cutoff]]
 
         return result
 
