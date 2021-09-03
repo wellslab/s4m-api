@@ -101,8 +101,8 @@ def main():
     restartServers()
 
 if __name__=="__main__":
-    source = input("Set source of migration [dev,test]: ")
-    if source in ['test','dev']:
+    source = input("Set source of migration [dev,test,prod1,prod2]: ")
+    if source in ['test','dev','prod1','prod2']:
         print(f"Source set to {source}.\n")
         main()
     else:
