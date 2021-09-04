@@ -118,7 +118,7 @@ def geneToSampleGroups(geneId, sampleGroup='cell_type'):
     #sampleGroupItems =  sampleCount[sampleCount>10].index.tolist()
 
     # DataFrame to hold the result
-    result = pandas.DataFrame()
+    result = pandas.DataFrame(columns=['score','datasetIds'])
 
     for datasetId in allDatasetIds:
         ds = datasets.Dataset(datasetId)

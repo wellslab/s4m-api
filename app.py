@@ -1,4 +1,5 @@
-from flask import Flask
+from flask import Flask, render_template
+
 from flask_restful import Api
 #from flask_cors import CORS
 import os, logging
@@ -62,6 +63,11 @@ api.add_resource(governance.DatasetSummary, '/governance/summary')
 api.add_resource(governance.DatasetReport, '/governance/<int:datasetId>/report')
 api.add_resource(governance.DatasetQCHtml, '/governance/<int:datasetId>/html')
 api.add_resource(governance.DatasetQCPCA, '/governance/<int:datasetId>/pca')
+
+# Static html at the home page level
+@app.route("/")
+def homepage():
+    return render_template('index.html')
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

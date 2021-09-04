@@ -17,6 +17,7 @@ conda install pyjwt
 conda install scp
 conda install requests
 conda install waitress
+conda install scikit-learn
 conda install -c conda-forge cvxopt
 ```
 
