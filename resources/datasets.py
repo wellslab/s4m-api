@@ -195,8 +195,8 @@ class DatasetSearch(Resource):
         # sunburst specific
         parser.add_argument('sunburst_inner', type=str, required=False)  # sample group for inner wheel of sunburst
         parser.add_argument('sunburst_outer', type=str, required=False)  # sample group for outer wheel of sunburst
-        parser.add_argument('sunburst_inner_cutoff', type=int, required=False, default=12)  # max number of
-        parser.add_argument('sunburst_outer_cutoff', type=int, required=False, default=8)  # max number of
+        parser.add_argument('sunburst_inner_cutoff', type=int, required=False, default=12)  # max number of items in the inner wheel
+        parser.add_argument('sunburst_outer_cutoff', type=int, required=False, default=8)  # max number of items in the outer wheel
 
         # for sunburst output format
         parser.add_argument('sunburst_inner', type=str, required=False)  # sample group for inner wheel of sunburst
@@ -215,7 +215,7 @@ class DatasetSearch(Resource):
         parser.add_argument('sort_ascending', type=str, required=False, default="True")
 
         # pagination
-        parser.add_argument('pagination_limit', type=int, required=False)  # leave as None if not requiring pagination
+        parser.add_argument('pagination_limit', type=int, required=False)  # number of items per page - leave as None if not requiring pagination
         parser.add_argument('pagination_start', type=int, required=False, default=0)  # start page
         args = parser.parse_args()
 

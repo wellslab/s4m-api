@@ -6,6 +6,12 @@ from resources import auth, errors
 
 import os, werkzeug, pandas, json
 
+class AtlasTypes(Resource):
+    def get(self):
+        """Return a dictionary of available atlas types and versions.
+        """
+        return atlases.atlasTypes()
+
 class Atlas(Resource):
     def get(self, atlasType, item):
         """Returns different objects from atlasType depending on item.
@@ -64,15 +70,9 @@ class Atlas(Resource):
                 df = df.reset_index()
             return df.to_dict(orient=args.get("orient"))
 
-class AtlasTypes(Resource):
-    def get(self):
-        """Return a dictionary of available atlas types and versions.
-        """
-        return atlases.atlasTypes()
-
 class AtlasProjection(Resource):
     def post(self, atlasType, dataSource):
-        """Project data onto the atlas of atlasType. dataSource is one of  ['Stemformatics','User'].
+        """Project data onto the atlas of atlasType. dataSource is one of  ['stemformatics','user'].
         """
         try:
             parser = reqparse.RequestParser()
@@ -84,7 +84,7 @@ class AtlasProjection(Resource):
             parser.add_argument('test_samples', type=werkzeug.datastructures.FileStorage, location='files')
             args = parser.parse_args()
 
-            if dataSource=="Stemformatics":
+            if dataSource.lower()=="stemformatics":
                 name = args.get('name').split("_")[0] # only take the author name for this
                 # Find dataset with same name from Stemformatics
                 publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
