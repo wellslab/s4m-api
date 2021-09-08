@@ -29,7 +29,7 @@ python app.py
 
 For test/production, use waitress to run it more permanently
 ```bash
-nohup waitress-serve --port=5000 app:app > app.log 2>&1 &
+nohup waitress-serve --port=5000 app:app > waitress.log 2>&1 &
 
 # manually kill the server by finding it id:
 ps -fu ec2-user | grep waitress

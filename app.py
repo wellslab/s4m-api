@@ -1,8 +1,8 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 
 from flask_restful import Api
 #from flask_cors import CORS
-import os, logging
+import os, logging, datetime
 
 # Load environment vars in .env file. Even though load_dotenv function call is not even necessary
 # when the app is called directly by python app.py, it is necessary for nohup.
@@ -20,10 +20,14 @@ api = Api(app, errors=errors)
 # According to this https://stackoverflow.com/questions/31873989/rejecting-files-greater-than-a-certain-amount-with-flask-uploads
 # not setting this should allow any size upload, but the server returns 413 error for larger file uploads.
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
-app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
+app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True  # seems to ignore this unless debug mode is on
 
-if os.getenv('FLASK_ENV')!='development':
-    logging.basicConfig(filename='app.log', level=logging.ERROR, format=f'%(asctime)s %(levelname)s %(name)s : %(message)s')
+#logging.basicConfig(filename='app.log', level=logging.ERROR, format=f'%(asctime)s %(levelname)s : %(message)s', datefmt='%Y-%m-%d_%H:%M')
+logger = logging.getLogger('werkzeug') # grabs underlying WSGI logger
+fh = logging.FileHandler('app.log')
+fh.setFormatter(logging.Formatter('%(asctime)s %(levelname)s : %(message)s', '%Y-%m-%d_%H:%M'))
+logger.setLevel(logging.WARNING)
+logger.addHandler(fh)
 
 # Get tables for a dataset with id
 api.add_resource(datasets.DatasetMetadata, '/datasets/<int:datasetId>/metadata')
@@ -68,6 +72,14 @@ api.add_resource(governance.DatasetQCPCA, '/governance/<int:datasetId>/pca')
 @app.route("/")
 def homepage():
     return render_template('index.html')
+
+# Record URLs before each request
+@app.before_request
+def request_tracer():
+    pathsToIgnore = ['','/auth/user','favicon.ico']
+    if request.path not in pathsToIgnore:
+        with open("app.log","a") as filehandle:
+            filehandle.write(f'{datetime.datetime.now().strftime("%Y-%m-%d_%H:%M")} {request.remote_addr} {request.full_path}\n')
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
