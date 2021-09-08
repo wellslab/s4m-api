@@ -85,7 +85,7 @@ def restartServers():
         if len(cols)>0:
             subprocess.run(['kill', cols[0].split()[1]])
         # restart
-        subprocess.run("nohup waitress-serve --port=5000 app:app > app.log 2>&1 &", shell=True)
+        subprocess.run("nohup waitress-serve --port=5000 app:app > waitress.log 2>&1 &", shell=True)
 
     answer = input(f"restart s4m-ui server? [N]/y ")
     if (answer=='y'):
