@@ -1,5 +1,10 @@
 """
-(s4m-api) [ec2-user@api-dev s4m-api]$ python -m scripts.migrate
+Script to migrate code and data from one server to another. Use it like this on the destination server
+(so it should be run under the s4m-api environment)
+    (s4m-api) [ec2-user@api-test s4m-api]$ python -m scripts.migrate
+
+It will ask for the source server, which will be used to copy data from, if that is required.
+For updating code, it will use git pull, which will ignore the source server.
 """
 
 import os, subprocess, scp
@@ -11,6 +16,8 @@ source = None
 _ssh = None
 
 def _getSSH():
+    """Make a ssh connection to the source server and return the SSHClient object
+    """
     global _ssh
     if _ssh is None:
         _ssh = SSHClient()
@@ -19,6 +26,8 @@ def _getSSH():
     return _ssh
 
 def rsyncFiles():
+    """Expression files are copied from source server using rsync.
+    """
     answer = input("rsync expression files? [N]/y ")
     if (answer=='y'):
         filepath = os.environ['EXPRESSION_FILEPATH']
@@ -34,6 +43,8 @@ def rsyncFiles():
         process = subprocess.run(command)
 
 def copyMongoData():
+    """Metadata are copied from source server using dump to text then read from text.
+    """
     for key in ['datasets','samples']:
         answer = input(f"Copy {key} metadata files? [N]/y ")
         if (answer=='y'):
@@ -43,7 +54,7 @@ def copyMongoData():
             # First check if backup file already exists
             # Runs a bash command like this on source: test -f /mnt/stemformatics-data/expression_files/../backups/datasets_20210902 && echo 'true'
             # which will return 'true' if the file exists
-            filepath = f"{os.environ['EXPRESSION_FILEPATH']}/../backups/{filename}.tsv"
+            filepath = f"{os.environ['EXPRESSION_FILEPATH'].replace('expression_files','backups')}/{filename}.tsv"
             command = f"test -f {filepath} && echo 'true'" 
             print(command)
             ssh = _getSSH()
@@ -62,7 +73,7 @@ def copyMongoData():
                 stdin, stdout, stderr = ssh.exec_command(command)
 
             # scp here
-            localfile = f"{os.environ['EXPRESSION_FILEPATH']}/../received/{source}/{filename}.tsv"
+            localfile = f"{os.environ['EXPRESSION_FILEPATH'].replace('expression_files','received')}/{source}/{filename}.tsv"
             scp = SCPClient(ssh.get_transport())
             scp.get(filepath, local_path=localfile)
 
@@ -71,12 +82,16 @@ def copyMongoData():
             createCollectionFromCSV('dataportal',key,localfile)
 
 def gitPull():
+    """Code update is done through git pull (easier for public repositories)
+    """
     for key in ["s4m-api", "s4m-ui"]:
         answer = input(f"git pull {key}? [N]/y ")
         if (answer=='y'):
             process = subprocess.run(f"cd; cd {key}; git pull", shell=True)
 
 def restartServers():
+    """Restart server after updates.
+    """
     answer = input(f"restart s4m-api server? [N]/y ")
     if (answer=='y'):
         # find pid and kill it
