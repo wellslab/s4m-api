@@ -498,13 +498,13 @@ class Dataset(object):
 
 def test_metadata():
     assert Dataset(2000).metadata()["name"] == "Matigian_2010_20699480"
-    print(Dataset(6864).metadata()['platform'])
+    assert Dataset(6864).metadata()['platform'] == "Illumina MouseRef-8 V2 (GPL6885 and A-MEXP-1174)"
 
 def test_samples():
     df = Dataset(6003).samples()
     assert set(df.reset_index().columns)==set(Dataset.sample_fields)
     assert df.shape==(9,21)
-    assert df.at["6003_GSM396481", "cell_type"] == "hESC-derived monocyte"
+    assert df.at["6003_GSM396481", "cell_type"]=='monocyte'
 
 def test_expressionFilepath():
     ds = Dataset(6003)
@@ -554,15 +554,16 @@ def test_expression():
 
 def test_ttest():
     ds = Dataset(8144) 
-    print(ds.ttest('ENSG00000197576', 'cell_type', ['conventional dendritic cell', 'macrophage']))
-    print(ds.ttest('ENSG00000150048', 'sample_type', ['CD14+ cell', 'cDC1']))
-    print(ds.ttest('ENSG00000172954', 'sample_type', ['CD14+ cell', 'cDC1']))
+    assert ds.ttest('ENSG00000197576', 'cell_type', ['conventional dendritic cell', 'macrophage'])['pvalue']<0.03
+    assert ds.ttest('ENSG00000150048', 'sample_type', ['CD14+ cell', 'cDC1'])['statistic']<-16
+    assert ds.ttest('ENSG00000172954', 'sample_type', ['CD14+ cell', 'cDC1'])['pvalue']>0.3
 
 def test_datasetMetadataVsDatasetLoadingTime():
     """Compare times for bulk query in mongo vs constructing a data frame after individual queries
     (457, 12) 0.012085914611816406
     (457, 13) 0.2130753993988037
     """
+    return
     import time
     t0 = time.time()
     df = datasetMetadataFromDatasetIds(datasetIdsFromQuery())
