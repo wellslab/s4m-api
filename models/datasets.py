@@ -98,7 +98,7 @@ def datasetIdsFromFields(platform_type=[], projects=[], organism=['homo sapiens'
             ids = set([item["dataset_id"] for item in cursor])
             datasetIds = ids if datasetIds is None else datasetIds.intersection(ids)
 
-    return [] if datasetIds is None else list(datasetIds)
+    return [] if datasetIds is None else list([dsId for dsId in datasetIds if dsId not in _exclude_list])
 
 def datasetIdFromName(name, publicOnly=True):
     params = {'name':name}
