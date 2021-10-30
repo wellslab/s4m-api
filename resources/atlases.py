@@ -129,8 +129,9 @@ class AtlasProjection(Resource):
             if "combinedCoords" in result:
                 result["combinedCoords"] = result["combinedCoords"].to_dict(orient="split")
             if "capybara" in result:
-                result["capybara"] = result["capybara"].to_dict(orient="split")
-                
+                for col in result["capybara"]:
+                    result["capybara"][col] = result["capybara"][col].to_dict(orient="split")
+
             return result
             
         except:

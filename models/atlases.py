@@ -173,57 +173,66 @@ class Atlas(object):
             result['combinedCoords'] = pandas.concat([coords, projectedCoords])
 
         if includeCapybara:
-            capy = self.capybara(testData, self.sampleMatrix()['Cell Type'])
-            # drop columns with very low values
             cutoff = 0.01
-            result['capybara'] = capy[[col for col in capy.columns if capy[col].max()>cutoff]]
+            capy = self.capybara(testData)
+            # drop columns with very low values
+            for column,df in capy.items():
+                df = df[[col for col in df.columns if df[col].max()>cutoff]]
+            result['capybara'] = capy
 
         return result
 
-    def capybara(self, query, anno, rankNormalise=True):
-        """Calculates capybara score for each sample in query and return the result as a pandas DataFrame. 
+    def capybara(self, query, rankNormalise=True):
+        """Calculates capybara score for each sample in query against each column of atlas samples table
+        and return the result as a dictionary, keyed on sample column and valued as a pandas DataFrame. 
         Implementation of https://doi.org/10.1101/2020.02.17.947390
         
-        > self.capybara(external_expression_dataframe, self.sampleMatrix()['Cell Type']).
-        The returned DataFrame has columns of query as rows, and unique values of anno as columns.
-        So each value is the score of that query column against each unique value of anno.
+        > self.capybara(external_expression_dataframe).
+        The returned dictionary has same keys as columns of self.sampleMatrix().
+        The value of dictionary is a DataFrame with columns of query as rows, and unique values of the atlas sample group.
+        So each value is the score of that query column against each unique value of atlas sample group.
 
         Parameters
         ----------         
         query
             Gene expression dataframe of query data that will be classified.
-        anno
-            Series that contains categories to classify into. E.g. annotations['Cell Type']
         """
         
         from cvxopt import matrix, solvers
         solvers.options['show_progress'] = False
+
+        # Get reference and query matrices and subset both on columns of 
         df = self.expressionMatrix(filtered=True)
-        df = df[anno.index]
+        samples = self.sampleMatrix()
+        df = df[samples.index]  # subset columns on index of samples (shouldn't have to be done for atlas, but just in case)
         query = query.loc[df.index.intersection(query.index)]
         df = df.loc[query.index]
 
         if rankNormalise:
             query = rankTransform(query)
 
-        n = anno.unique().shape[0]
-        reference = pandas.DataFrame(index=anno.unique(), columns=df.index)
-        for i_celltype in anno.unique():
-            reference.loc[i_celltype,:] = df.loc[:,anno==i_celltype].mean(axis=1)
-        P = matrix(reference.dot(reference.transpose()).values.astype(numpy.double))
-        G = matrix(0.0, (n,n))
-        G[::n+1] = -1.0
-        h = matrix(0.0, (n,1))
-        A = matrix(1.0, (1,n))
-        b = matrix(1.0)
-        cell_score = pandas.DataFrame(columns=anno.unique(), index=query.columns)
-        for i in range(query.shape[1]):
-            y = -1.0*query.iloc[:,i].values.astype(numpy.double)
-            q = matrix(numpy.matmul(reference.values, y).astype(numpy.double))
-            solution = solvers.qp(P, q, G, h, A, b, show_progress=False)
-            cell_score.iloc[i,:] = numpy.array(solution['x']).reshape(-1)
-        
-        return cell_score
+        result = {}
+        for column in samples.columns:
+            anno = samples[column]
+            n = anno.unique().shape[0]
+            reference = pandas.DataFrame(index=anno.unique(), columns=df.index)
+            for i_celltype in anno.unique():
+                reference.loc[i_celltype,:] = df.loc[:,anno==i_celltype].mean(axis=1)
+            P = matrix(reference.dot(reference.transpose()).values.astype(numpy.double))
+            G = matrix(0.0, (n,n))
+            G[::n+1] = -1.0
+            h = matrix(0.0, (n,1))
+            A = matrix(1.0, (1,n))
+            b = matrix(1.0)
+            cell_score = pandas.DataFrame(columns=anno.unique(), index=query.columns)
+            for i in range(query.shape[1]):
+                y = -1.0*query.iloc[:,i].values.astype(numpy.double)
+                q = matrix(numpy.matmul(reference.values, y).astype(numpy.double))
+                solution = solvers.qp(P, q, G, h, A, b, show_progress=False)
+                cell_score.iloc[i,:] = numpy.array(solution['x']).reshape(-1)
+            result[column] = cell_score
+
+        return result
 
 # ----------------------------------------------------------
 # tests: eg. $nosetests -s <filename>:ClassName.func_name
@@ -274,15 +283,19 @@ def test_projection():
     df = ds.expressionMatrix(key='genes')
     res = atlas.projection('test', df, includeCombinedCoords=False)
     assert res['coords'].shape == (124,3)
+    assert round(res['capybara']['Cell Type'].at['2000_1699538155_A','cDC1']*1000)==408
 
 def test_capybara():
     from models import datasets
     atlas = Atlas('dc')
     ds = datasets.Dataset(2000)
     df = ds.expressionMatrix(key='genes')
-    samples = atlas.sampleMatrix()
-    output = atlas.capybara(df, samples['Cell Type'])
-    print(output.head())
+    import time
+    t0 = time.time()
+    output = atlas.capybara(df)
+    print(len(output), time.time()-t0)
+    assert output['Cell Type'].at['2000_1699538155_A','monocyte']<0.001
+    assert round(output['Cell Type'].at['2000_1699538155_C','cDC1']*100)==48
 
 def reorderSampleColumns():
     atlas = Atlas('myeloid')

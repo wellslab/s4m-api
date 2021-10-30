@@ -535,9 +535,9 @@ def test_datasetIdsFromQuery():
 
 def test_datasetIdsFromFields():
     datasetIds = datasetIdsFromFields()
-    assert len(datasetIds)==338
+    assert len(datasetIds)==334
     datasetIds = datasetIdsFromFields(organism=['mus musculus'])
-    assert len(datasetIds)==129
+    assert len(datasetIds)==107
 
 def test_datasetIdFromName():
     assert datasetIdFromName('Abud_2017_28426964')==7268
@@ -558,7 +558,7 @@ def test_ttest():
     assert ds.ttest('ENSG00000150048', 'sample_type', ['CD14+ cell', 'cDC1'])['statistic']<-16
     assert ds.ttest('ENSG00000172954', 'sample_type', ['CD14+ cell', 'cDC1'])['pvalue']>0.3
 
-def test_datasetMetadataVsDatasetLoadingTime():
+def _datasetMetadataVsDatasetLoadingTime():
     """Compare times for bulk query in mongo vs constructing a data frame after individual queries
     (457, 12) 0.012085914611816406
     (457, 13) 0.2130753993988037

@@ -154,6 +154,7 @@ def geneToSampleGroups(geneId, sampleGroup='cell_type'):
 
     # Add other properties
     result['count'] = [len(item) for item in result['datasetIds']]
+    result.index.name = 'sampleGroupItem'
 
     return result
 
@@ -251,19 +252,24 @@ def createGenesets():
 # tests: eg. $nosetests -s <filename>:ClassName.func_name
 # ----------------------------------------------------------
 def test_sampleGroupToGenes():
-    print(sampleGroupToGenes('cell_type','fibroblast'))
-    #['rankScore'].head())
+    output = sampleGroupToGenes('cell_type','fibroblast')
+    assert round(output['rankScore'].loc['ENSG00000105974','meanRank']*1000)==806
+    assert output['rankScore'].loc['ENSG00000231924','count']==35
 
 def test_geneToSampleGroups():
-    print(geneToSampleGroups('ENSG00000102145'))
+    #print(geneToSampleGroups('ENSG00000102145'))
+    df = geneToSampleGroups('ENSG00000118513')
+    assert round(df.loc['B lymphocyte','score'][0])==39
+    assert round(df.loc['Jurkat','datasetIds'][0])==6245
+    
 
-def test_geneset():
-    gs = genesetFromName('NABA_COLLAGENS')
-    df = pandas.DataFrame.from_records(gs['scores']).set_index('index')
-    print(sorted(df['diff']))
-    return
-    print(df['high'].value_counts())
-    print(df['low'].value_counts())
+# def test_geneset():
+#     gs = genesetFromName('NABA_COLLAGENS')
+#     df = pandas.DataFrame.from_records(gs['scores']).set_index('index')
+#     print(sorted(df['diff']))
+#     return
+#     print(df['high'].value_counts())
+#     print(df['low'].value_counts())
 
 # def geneset(geneIds=[], searchString="", limit=100):
 #     """Return a pandas DataFrame which contains attributes of genes matching the parameters.
