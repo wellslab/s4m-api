@@ -4,7 +4,7 @@ Assumes that dataset and sample metadata are already present in the current syst
 
 Examples of how to run this script (ensure you're in the application directory):
 (Requires environment variable EXPRESSION_FILEPATH, which points to where the expression files are)
-(s4m-api) [ec2-user@api-dev s4m-api]$ python -m scripts.import_expression_data 6122
+(s4m-api) [ec2-user@api-dev s4m-api]$ python -m scripts.import_expression_data -d 6122
 """
 
 import os, sys, pandas, scp, argparse

@@ -158,6 +158,54 @@ def geneToSampleGroups(geneId, sampleGroup='cell_type'):
 
     return result
 
+# ----------------------------------------------------------
+# Geneset methods - not used currently
+# ----------------------------------------------------------
+def scoreGeneset():
+    """
+    """
+    from sklearn.decomposition import PCA
+    #from scipy.stats import ttest_ind
+
+    genes = ['ENSG00000185745', 'ENSG00000157601', 'ENSG00000187608', 'ENSG00000119922', 'ENSG00000119917', 'ENSG00000134321', 'ENSG00000137959', 'ENSG00000126709', 'ENSG00000089127', 'ENSG00000135114', 'ENSG00000137965', 'ENSG00000165949', 'ENSG00000115267', 'ENSG00000138646', 'ENSG00000183486', 'ENSG00000169245', 'ENSG00000185885', 'ENSG00000138642', 'ENSG00000111331', 'ENSG00000111335', 'ENSG00000185201', 'ENSG00000107201', 'ENSG00000132530', 'ENSG00000185507', 'ENSG00000068079', 'ENSG00000205413', 'ENSG00000130589', 'ENSG00000184979', 'ENSG00000117228', 'ENSG00000121858', 'ENSG00000172183', 'ENSG00000137628', 'ENSG00000135899', 'ENSG00000078081', 'ENSG00000133106', 'ENSG00000115415', 'ENSG00000225492', 'ENSG00000168394', 'ENSG00000188313', 'ENSG00000156587', 'ENSG00000177409', 'ENSG00000169248', 'ENSG00000055332', 'ENSG00000059378', 'ENSG00000138496', 'ENSG00000136514', 'ENSG00000173193', 'ENSG00000130303', 'ENSG00000132274', 'ENSG00000142089', 'ENSG00000213928']
+    fields = ["cell_type", "parental_cell_type", "final_cell_type", "disease_state", "sample_type", "tissue_of_origin", 
+                "cell_line", "facs_profile_positive", "facs_profile_negative", "experiment_time", "sex", 
+                "reprogramming_method", "genetic_modification", "sample_source", "developmental_stage", "treatment"]
+    field = "cell_type"
+    allDatasets = datasets.datasetIdsFromFields(platform_type=['Microarray','RNASeq'])
+    score = []
+    for datasetId in allDatasets:
+        ds = datasets.Dataset(datasetId)
+        if not (ds.platformType()=='RNASeq' or ds.platformType()=='Microarray'): continue
+        
+        # focus on subset of expression matrix based on genes
+        df = ds.expressionMatrix(key="cpm", applyLog2=True)
+        df = df.loc[df.index.intersection(genes)]
+        if len(df)==0:
+            continue
+        samples = ds.samples()
+        # some datasets still require fixing of expression matrix columns to be consistent with samples index
+        if len(df.columns.intersection(samples.index))==0:
+            continue
+        df = df[samples.index]
+
+        # perform 1-d PCA on df
+        pca = PCA(n_components=1, svd_solver='full')
+        coords = pandas.DataFrame(pca.fit_transform(df.values.T), index=df.columns)[0]  # can also just run fit
+        
+        # find mean of each sample group item on pca coords
+        values = coords.groupby(samples[field]).mean().sort_values(ascending=False)
+        if len(values)<2:  # some datasets may have one field item specified only, or contain nan which is ignored in groupby
+            continue
+
+        # get highest difference in mean
+        score.append([abs(values[0] - values[-1]), [values.index[0], values.index[1]], datasetId])
+        if len(score)>10:
+            score = sorted(score, reverse=True)
+            for item in score:
+                print(item[2], item[1], item[0])
+            return
+
 def createGeneset(msigName=None, name=None, geneSymbols=[], sampleGroupItem='cell_type'):
     """Create a geneset from some source. If msigName, use name of MsigDB from Broad Institute.
     """
@@ -262,6 +310,8 @@ def test_geneToSampleGroups():
     assert round(df.loc['B lymphocyte','score'][0])==39
     assert round(df.loc['Jurkat','datasetIds'][0])==6245
     
+def test_scoreGeneset():
+    scoreGeneset()
 
 # def test_geneset():
 #     gs = genesetFromName('NABA_COLLAGENS')

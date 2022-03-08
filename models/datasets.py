@@ -281,7 +281,7 @@ def sampleSummaryTable():
 
     keysToIgnore = ['sample_id','dataset_id','organism','media','sample_type_long','sample_description',
                     'external_source_id','treatment','sex','labelling','reprogramming_method','sample_name_long',
-                    'facs_profile']
+                    'facs_profile_positive', 'facs_profile_negative']
     for key in Dataset.sample_fields:
         if key in keysToIgnore: continue
         values = allValues('samples', key, includeCount=True)
@@ -334,8 +334,9 @@ class Dataset(object):
 
     # This is the full list of fields associated with sample metadata
     sample_fields = ["sample_id", "dataset_id", "cell_type", "parental_cell_type", "final_cell_type", "disease_state", 
-               "organism", "sample_type", "tissue_of_origin", "sample_name_long", "media", "cell_line", "facs_profile", 
-               "sample_description", "experiment_time", "sex", "reprogramming_method", "genetic_modification",
+               "organism", "sample_type", "tissue_of_origin", "sample_name_long", "media", "cell_line", 
+               "facs_profile_positive", "facs_profile_negative", "sample_description", 
+               "experiment_time", "sex", "reprogramming_method", "genetic_modification",
                "sample_source", "developmental_stage", "treatment", "external_source_id"]
 
     # All available platform_type values
