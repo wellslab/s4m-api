@@ -57,6 +57,12 @@ def importExpressionData(datasetId):
     else:
         scp.get('/mnt/data/pending/%s/tables/%s.raw.tsv' % (dirname, datasetId), local_path=dirname)
 
+    # Create .h5 file
+    df = ds.expressionMatrix(key="genes")
+    store = pandas.HDFStore(f"{dirname}/{datasetId}.genes.h5")
+    store["genes"] = df
+    store.close()
+
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
