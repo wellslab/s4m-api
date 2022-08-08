@@ -42,6 +42,11 @@ def atlasTypes():
                                'release_notes': [open(os.path.join(item, 'Readme.txt')).read() for item in dirlist]}
     return dictToReturn
 
+def projectSingleCellData(scData):
+    """
+    """
+    return pandas.DataFrame()
+
 # ----------------------------------------------------------
 # Atlas class
 # ----------------------------------------------------------
@@ -296,6 +301,9 @@ def test_capybara():
     print(len(output), time.time()-t0)
     assert output['Cell Type'].at['2000_1699538155_A','monocyte']<0.001
     assert round(output['Cell Type'].at['2000_1699538155_C','cDC1']*100)==48
+
+def test_projectSingleCellData():
+    print(list(atlasTypes().keys()))
 
 def reorderSampleColumns():
     atlas = Atlas('myeloid')
