@@ -14,8 +14,19 @@ from scp import SCPClient
 sys.path.append(os.path.join(sys.path[0]))
 from models import datasets
 
-def importExpressionData(datasetId):
+def createH5GenesFile(datasetId):
+    """Create .h5 file of genes, which is used to access gene expression faster than text files.
     """
+    os.chdir(os.getenv('EXPRESSION_FILEPATH'))
+    ds = datasets.Dataset(datasetId)
+    df = pandas.read_csv(ds.expressionFilePath(key="genes"), sep="\t", index_col=0)
+    dirname = "%s_%s" % (datasetId, ds.metadata()['version'])
+    store = pandas.HDFStore(f"{dirname}/{datasetId}.genes.h5")
+    store["genes"] = df
+    store.close()
+
+def importExpressionData(datasetId):
+    """Import the expression data for datasetId from data-source.
     """
     if "EXPRESSION_FILEPATH" not in os.environ:
         print("No EXPRESSION_FILEPATH in environment")
@@ -57,12 +68,7 @@ def importExpressionData(datasetId):
     else:
         scp.get('/mnt/data/pending/%s/tables/%s.raw.tsv' % (dirname, datasetId), local_path=dirname)
 
-    # Create .h5 file
-    df = ds.expressionMatrix(key="genes")
-    store = pandas.HDFStore(f"{dirname}/{datasetId}.genes.h5")
-    store["genes"] = df
-    store.close()
-
+    createH5GenesFile(datasetId)
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
@@ -71,3 +77,4 @@ if __name__=="__main__":
     args = parser.parse_args()
     
     importExpressionData(datasetId=args.d)
+    #createH5GenesFile(datasetId=args.d)
