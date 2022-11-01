@@ -145,11 +145,6 @@ class Atlas(object):
 
         commonGenes = testData.index.intersection(df.index)  # common index between test and atlas
 
-        # print(df)
-        # print(testData)
-        # print(genes)
-        # print(commonGenes)
-
         if len(testData)!=len(set(testData.index)):
             result["error"] = "This expression data contain duplicate index. Please remove these first."
 
@@ -184,7 +179,6 @@ class Atlas(object):
             result['combinedCoords'] = pandas.concat([coords, projectedCoords])
 
         if includeCapybara:
-            print('Capybara included')
             cutoff = 0.01
             capy = self.capybara(testData)
             # drop columns with very low values

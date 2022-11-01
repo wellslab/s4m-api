@@ -7,7 +7,6 @@ from datetime import datetime
 import pandas as pd
 
 import os, werkzeug, pandas, json, uuid, pathlib, csv
-# import pickle
 
 class AtlasTypes(Resource):
     def get(self):
@@ -74,6 +73,29 @@ class Atlas(Resource):
             return df.to_dict(orient=args.get("orient"))
 
 class AtlasProjection(Resource):
+    # Check the bulk data file format
+    def check_format(self, expression, samples, sample_column):
+        # Check number of columns in expression matrix and number of rows in sample matrix is the same
+        if len(expression.columns) != len(samples):
+            return {'error': 'The number of columns in the expression matrix and rows in the sample matrix need to match. Check the file formats.'}
+        
+        # Check the expression matrix columns are present in the row IDs in the sample matrix
+        for column in expression.columns:
+            if column not in samples.index:
+                return {'error': 'The column headings in the expression matrix need to be present in the row IDs in the sample matrix. Check the file formats.'}
+            
+        # Check the expression matrix uses Ensembl IDs
+        for index in expression.index:
+            if index[0:4] != 'ENSG':
+                return {'error': 'The expression matrix must use Ensembl IDs as row IDs. Check the file format.'}
+        
+        # Check the sample column given exists in the sample matrix
+        if sample_column not in samples.columns and sample_column != "":
+            return {'error': 'The sample column must be a column that exists in the sample matrix. Check the sample column.'}
+        
+        return {'error': ""}
+
+
     def post(self, atlasType, dataSource):
         """Project data onto the atlas of atlasType. dataSource is one of  ['stemformatics','user','user-single'].
         """
@@ -93,9 +115,6 @@ class AtlasProjection(Resource):
                 if len(df)==0:
                     print('error')
                     return {'error': 'The data matrix came back as zero length. Check its format.'}
-                # print(df)
-
-                # Read samples.tsv saved in folder
 
                 # Create unique ID
                 id = uuid.uuid4()
@@ -103,10 +122,9 @@ class AtlasProjection(Resource):
                 # Check for unique ID in ids.tsv 
                 try:
                     path = "/mnt/stemformatics-data/user_projection_data/ids.csv"
-
                     ids_df = pandas.read_csv(path, index_col=0)
-
                     unique = False
+                    
                     # Loop until unique ID
                     while not unique:
                         if id in ids_df.index:
@@ -142,9 +160,9 @@ class AtlasProjection(Resource):
 
                 except IOError:
                     print("Error: file does not exist.")
-                    # print(pathlib.Path.cwd())
                     return
-
+                
+            # Stemformatics or Bulk data options
             else:
                 parser = reqparse.RequestParser()
                 parser.add_argument('name', type=str, required=False)  # selected Stemformatics dataset name (eg. Helft_2017_28723558)
@@ -176,6 +194,12 @@ class AtlasProjection(Resource):
                     name = args.get('test_name')
                     df = pandas.read_csv(args.get('test_expression'), sep='\t', index_col=0)
                     samples = pandas.read_csv(args.get('test_samples'), sep='\t', index_col=0)
+                    
+                    # Check validation on the uploaded data files format
+                    check = self.check_format(df, samples, args.get('test_sample_column'))
+                    if check["error"] != "":
+                        return {"error": check["error"]}
+                    
                     # Some validation on user supplied data
                     if len(df)==0:
                         return {'error': 'The expression matrix came back as zero length. Check its format.'}
@@ -183,12 +207,11 @@ class AtlasProjection(Resource):
                         return {'error': 'The sample table came back as zero length. Check its format and ensure its row index match columns of expression matrix.'}
                     samples = samples.loc[df.columns]
                     column = args.get('test_sample_column')
+                    
                     if column not in samples.columns: column = samples.columns[0]
                     
                 # Create atlas data instance
                 atlas = atlases.Atlas(atlasType)
-                # print(atlas.expressionMatrix(filtered=True))
-                # print(atlas.geneInfo())
 
                 # Perform projection
                 result = atlas.projection(name, df, includeCombinedCoords=False)
@@ -206,13 +229,6 @@ class AtlasProjection(Resource):
                     for col in result["capybara"]:
                         result["capybara"][col] = result["capybara"][col].to_dict(orient="split")
 
-                # print(type(result))
-                # output_path = "/mnt/stemformatics-data/user_projection_data/test.json"
-                # with open(output_path, 'w') as f:
-                #     json.dump(result, f, ensure_ascii=False, indent=4)
-
-                # print(result)
-                # print(type(result["coords"]))
                 return result
             
         except:
@@ -221,128 +237,17 @@ class AtlasProjection(Resource):
 # Get - encaapsulates all parameters in URL, Post - from form submitted to server
 # Return JSON object to UI server
 class AtlasProjectionResults(Resource):
-
-    # def get(userID):
-    #     parser = reqparse.RequestParser()
-    #     parser.add_argument('userID', type=str, required=False)
-    #     # parser.add_argument('atlasType', type=str, required=False)
-    #     args = parser.parse_args()
-    #     id = args.get("userID")
-    #     # atlasTypee = args.get("atlasType")
-    #     # print(atlasTypee)
-    #     atlasType = "myeloid"
-
-    #     # Return JSON object from userID folder
-    #     input_path = "/mnt/stemformatics-data/user_projection_data/{}/input.tsv".format(id)
-    #     df = pandas.read_csv(input_path, sep='\t', index_col=0)
-
-    #     # Create atlas data instance
-    #     atlas = atlases.Atlas(atlasType)
-    #     # print(atlasType)
-    #     # print(atlas.expressionMatrix(filtered=True))
-    #     # print(atlas.geneInfo())
-
-    #     # Perform projection
-    #     result = atlas.projection(id, df, includeCombinedCoords=False)
-    #     if result["error"] !="": # Returning empty data frame may cause exception when trying to parse as json, so just return error string
-    #         return {"error": result["error"]}
-
-    #     # Read samples.tsv from folder
-    #     samples_path = "/mnt/stemformatics-data/user_projection_data/ae962dbd-aff5-484a-9cdc-94885aeafe28/input.tsv"
-    #     samples = pandas.read_csv(samples_path, sep='\t', index_col=0)
-    #     # print(samples)
-
-    #     if len(df)==0:
-    #         return {'error': 'The expression matrix came back as zero length. Check its format.'}
-    #     elif len(samples)==0:
-    #         return {'error': 'The sample table came back as zero length. Check its format and ensure its row index match columns of expression matrix.'}
-
-    #     samples = samples.loc[df.columns]
-    #     # column = args.get('test_sample_column')
-    #     column = 'Sample Type'
-    #     if column not in samples.columns: column = samples.columns[0]
-
-    #     # Prepare the dictionary to return - each object must be JSON serializable (so don't return data frame).
-    #     name = "notta"
-    #     result["coords"] = result["coords"].to_dict(orient="records")
-    #     result["samples"] = samples.reset_index().fillna('').to_dict(orient="records")
-    #     result["sampleIds"] = ["%s_%s" % (name, item) for item in samples.index]
-    #     result["column"] = column
-    #     if "combinedCoords" in result:
-    #         result["combinedCoords"] = result["combinedCoords"].to_dict(orient="split")
-    #     if "capybara" in result:
-    #         for col in result["capybara"]:
-    #             result["capybara"][col] = result["capybara"][col].to_dict(orient="split")
-        
-    #     return result
-
-    def jsonKeys2int(x):
-        if isinstance(x, dict):
-            return {int(k):v for k,v in x.items()}
-        return x
     
     def get(self):
         parser = reqparse.RequestParser()
         parser.add_argument("id", type=str, required=False)
         args = parser.parse_args()
         id = args.get("id")
-        # print(id)
 
         # Return JSON object from userID folder
         path = "/../mnt/stemformatics-data/user_projection_data/{}/output.json".format(id)
         with open(path, 'r') as f:
-            # result = json.load(f, object_hook=jsonKeys2int)
             result = json.load(f)
-
-
-        # print("Type after loading...")
-        # print(type(result))
 
         return result
 
-    # def get(userID):
-    #     # print(userID)
-    #     parser = reqparse.RequestParser()
-    #     parser.add_argument('userID', type=str, required=False)
-    #     args = parser.parse_args()
-    #     id = args.get("userID")
-    #     print(id)
-
-    #     # Return JSON object from userID folder
-    #     path = "/../mnt/stemformatics-data/user_projection_data/{}/output.json".format(id)
-    #     with open(path, 'r') as f:
-    #         # result = json.load(f, object_hook=jsonKeys2int)
-    #         result = json.load(f)
-
-
-    #     print("Type after loading...")
-    #     print(type(result))
-    #     # print(type(result["coords"]))
-    #     # return userID
-
-    #     # input_path = "/mnt/stemformatics-data/user_projection_data/{}/input.tsv".format(id)
-    #     # input_df = pandas.read_csv(input_path, sep='\t', index_col=0)
-
-    #     # samples_path = "/mnt/stemformatics-data/user_projection_data/ae962dbd-aff5-484a-9cdc-94885aeafe28/input.tsv"
-    #     # samples = pandas.read_csv(samples_path, sep='\t', index_col=0)
-    #     # samples = samples.loc[input_df.columns]
-    #     # # column = args.get('test_sample_column')
-    #     # column = 'Sample Type'
-    #     # if column not in samples.columns: column = samples.columns[0]
-
-
-    #     # # Prepare the dictionary to return - each object must be JSON serializable (so don't return data frame).
-    #     # name = id
-    #     # column = 'Sample Type'
-    #     # result["coords"] = result["coords"].to_dict(orient="records")
-    #     # result["samples"] = samples.reset_index().fillna('').to_dict(orient="records")
-    #     # result["sampleIds"] = ["%s_%s" % (name, item) for item in samples.index]
-    #     # result["column"] = column
-    #     # if "combinedCoords" in result:
-    #     #     result["combinedCoords"] = result["combinedCoords"].to_dict(orient="split")
-    #     # if "capybara" in result:
-    #     #     for col in result["capybara"]:
-    #     #         result["capybara"][col] = result["capybara"][col].to_dict(orient="split")
-
-    #     # print(result)
-    #     return result
