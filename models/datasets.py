@@ -173,14 +173,22 @@ def allValues(collection, key, includeCount=False, public_only=True, organism='h
 def sunburstData(samples, childKey='final_cell_type', parentKey='parental_cell_type',
                    parentCutoff=12, childCutoff=8, sep='_', includeOther=False):
     """Return a pandas DataFrame that can be used as input to sunburst plot.
+    Here, the sunburst plot is assumed to have 2 levels of hierarchy: parent >> child.
+    Cutoffs are used to limit the number of returned results.
     samples is a samples table (in same format as Dataset.samples()).
+
+    Returned DataFrame looks like:
+                                                                            labels                                     parents      values
+    ids                                                                                                                          
+    embryonic stem cell_neural progenitor cell                 neural progenitor cell                         embryonic stem cell   ['ds_1_s1','ds_2_s4',...]
+    peripheral blood mononuclear cell_induced pluri...  induced pluripotent stem cell           peripheral blood mononuclear cell   ['ds_3_s3','ds_3_s16',...]
     """
     topParents = samples[parentKey].value_counts().sort_values(ascending=False)[:parentCutoff].index
     
     # Find children with highest numbers from topParent
     df = samples[samples[parentKey].isin(topParents)]
     children = df[childKey].value_counts().sort_values(ascending=False)[:childCutoff].index
-                
+    
     subset = df if includeOther else df[df[childKey].isin(children)]
     # If a parent has only one child, remove this key
     s = subset.groupby(parentKey)[childKey].unique()  
@@ -188,9 +196,9 @@ def sunburstData(samples, childKey='final_cell_type', parentKey='parental_cell_t
     parentsToKeep = [key for key,val in s.items() if len(val)>1]
     subset = subset[subset[parentKey].isin(parentsToKeep)]
 
-    # Create a dictionary that counts number of samples for each child, which is actually
-    # a combination of parent_child, because child may be duplicated (same child occurs under a different parent)
-    # and each child must have a unique id.
+    # Create a dictionary that stores sampleIds for each child as values.
+    # The key for this dictionary is a combination of parent_child, 
+    # because child may be duplicated (same child occurs under a different parent) and each child must have a unique id. 
     combo = {}
     for index,row in subset.iterrows():
         child = row[childKey] if not includeOther or row[childKey] in children else 'other'
@@ -199,20 +207,21 @@ def sunburstData(samples, childKey='final_cell_type', parentKey='parental_cell_t
             combo[key] = []
         combo[key].append(index)
 
-    # combo.keys() gives us the id to use for sunburst labels. 
-    # Create a data frame we can use for sunburst plot.
+    # combo.keys() gives us the id to use for sunburst labels (eg. 'embryonic stem cell_neural progenitor cell')
+    # Create a data frame we can use for sunburst plot. Each row of this data frame is an element of the sunburst plot,
+    # where the index is the id of the element, labels is what's displayed, parents is the parent of the element,
+    # and values is used to determine size of the element.
     df = pandas.DataFrame(index=list(combo.keys()), columns=['labels','parents','values'])
     df.index.name = 'ids'
     for key,val in combo.items():
         df.at[key,'labels'] = key.split(sep)[1]
         df.at[key,'parents'] = key.split(sep)[0]
         df.at[key,'values'] = val
-    
-    # if a parent is not found existing childKey though, we need to add them also
-    parentsWithoutLabels = [item for item in df['parents'].unique() if item not in df.index]
-    for item in parentsWithoutLabels:
-        df.at[item] = [item, '', sum(df[df['parents']==item]['values'].tolist(),[])]
 
+    # Above just adds elements for the outer ring of the sunburst. Inner ring must consist of
+    # all the parents of the outer ring, and these all have a root parent ''.
+    for item in df['parents'].unique():
+        df.loc[item] = [item, '', sum(df[df['parents']==item]['values'].tolist(),[])]
     return df
 
 def dataAsZipfile(datasetIds, publicOnly=True):
