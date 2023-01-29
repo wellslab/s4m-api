@@ -49,6 +49,12 @@ Authentication including token generation
 https://scotch.io/tutorials/build-a-restful-api-with-flask-the-tdd-way-part-2
 https://realpython.com/token-based-authentication-with-flask/#jwt-setup
 
+If the api suddenly starts returning 400 bad request, it could be that werkzeug got upgraded. See [here](https://stackoverflow.com/questions/72157708/flask-restx-request-parser-returns-400-bad-request/72174259#72174259). This can be fixed by:
+```bash
+conda install werkzeug=2.0.*
+```
+
+
 Return a string as file in response
 ```
 from flask import make_response

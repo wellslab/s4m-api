@@ -57,7 +57,7 @@ class Atlas(object):
     """
 
     # Full list of current atlas types
-    all_atlas_types = ['myeloid','blood','dc']
+    all_atlas_types = ['myeloid','blood','dc','activation']
 
     def __init__(self, atlasType, version=None):
         # each atlas type is under its own directory under ATLAS_FILEPATH
@@ -249,6 +249,11 @@ def test_atlas():
     > export ATLAS_TYPE=dc
     (don't forget to also export ATLAS_FILEPATH=/path/to/atlas/files)
     """
+    if 'ATLAS_TYPE' not in os.environ:
+        print("test_atlas works on a single atlas specified by environ variable, for example:")
+        print("> export ATLAS_TYPE=dc")
+        print("Try again after setting this variable")
+        return
     atlas = Atlas(os.environ['ATLAS_TYPE'])
     
     # Check that all files exist
