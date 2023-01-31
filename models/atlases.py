@@ -99,8 +99,11 @@ class Atlas(object):
     def sampleMatrix(self):
         """Return sample annotation matrix for the atlas as a pandas DataFrame object. The shape of the data frame
         will be number_of_samples x number_of_columns, with sample ids as index.
+        NA values shouldn't happen in atlas samples, since they are more carefully annotated, but if they do exist,
+        downstream analyses may be affected and it's probably best to assign them something.
+        There are already 'unknown' values, but it may be a case that a particular column doesn't apply (eg. cell line)
         """
-        return pandas.read_csv(os.path.join(self.atlasFilePath, "samples.tsv"), sep="\t", index_col=0)   
+        return pandas.read_csv(os.path.join(self.atlasFilePath, "samples.tsv"), sep="\t", index_col=0).fillna('[NA]')
 
     def geneInfo(self):
         """Return a pandas DataFrame of information about all genes in the atlas, after reading the genes.tsv
@@ -231,6 +234,7 @@ class Atlas(object):
             A = matrix(1.0, (1,n))
             b = matrix(1.0)
             cell_score = pandas.DataFrame(columns=anno.unique(), index=query.columns)
+            print(column, anno.shape, n)
             for i in range(query.shape[1]):
                 y = -1.0*query.iloc[:,i].values.astype(numpy.double)
                 q = matrix(numpy.matmul(reference.values, y).astype(numpy.double))
