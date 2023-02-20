@@ -23,7 +23,19 @@ import os, pandas, json, numpy
 # Functions
 # ----------------------------------------------------------
 def rankTransform(df):
-    """Return a rank transformed version of data frame
+    """Return a rank transformed version of data frame, where smallest value is 0 and largest is 1.
+    For tied values, they are given same values, rather than one given higher value arbitrarily.
+
+    For gene expression matrices, it's likely to be better to perform rank transform on the raw counts
+    rather than log normalised values, because log values may differ very slightly when running the
+    program and two genes may end up with different rank normalised values even though they may have
+    started with same integer counts. Of course this doesn't apply to microarray data.
+
+    The implementation here doesn't actually produce 0 as smallest value, but 1/df.shape[0].
+    This is for historical reasons in our lab. When working with gene expression matrices, this lowest value
+    will be small (large number of genes), and there will also be many tied values for RNA-seq data.
+    Use this form to get guaranteed range of [0,1]:
+        (df.rank(axis=0, ascending=True, na_option='bottom')-1)/(df.shape[0]-1) 
     """
     return (df.shape[0] - df.rank(axis=0, ascending=False, na_option='bottom')+1)/df.shape[0]
 
@@ -164,7 +176,7 @@ class Atlas(object):
         # This means any genes in testData not found in df will be dropped, and any genes in df not found in testData will be assigned Nan
         # - we convert these to zero and live with this, as long as there aren't so many!
         dfTest = rankTransform(testData.reindex(df.index).fillna(0))
-        expression = pandas.concat([df, dfTest], axis=1)
+        #expression = pandas.concat([df, dfTest], axis=1)
 
         # perform pca on atlas
         from sklearn.decomposition import PCA
@@ -234,7 +246,6 @@ class Atlas(object):
             A = matrix(1.0, (1,n))
             b = matrix(1.0)
             cell_score = pandas.DataFrame(columns=anno.unique(), index=query.columns)
-            print(column, anno.shape, n)
             for i in range(query.shape[1]):
                 y = -1.0*query.iloc[:,i].values.astype(numpy.double)
                 q = matrix(numpy.matmul(reference.values, y).astype(numpy.double))
@@ -314,6 +325,13 @@ def test_capybara():
 
 def test_projectSingleCellData():
     print(list(atlasTypes().keys()))
+
+def test_rankTransform():
+    #df = pandas.DataFrame([[0, 0, 0, 3, 5, 7, 11]]).transpose()
+    df = pandas.DataFrame([[2,2,5,10]]).transpose()
+    print((df.rank(axis=0, ascending=True, na_option='bottom')-1)/(df.shape[0]-1))
+    print(df.shape[0] - df.rank(axis=0, ascending=False, na_option='bottom')+1)
+    print(rankTransform(df))
 
 def reorderSampleColumns():
     atlas = Atlas('myeloid')
