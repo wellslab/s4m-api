@@ -97,140 +97,77 @@ class AtlasProjection(Resource):
 
 
     def post(self, atlasType, dataSource):
-        """Project data onto the atlas of atlasType. dataSource is one of  ['stemformatics','user','user-single'].
+        """Project data onto the atlas of atlasType. dataSource is one of  ['stemformatics','user'].
+        The word 'query' would be better to use rather than 'test' for the data being projected,
+        but it got stuck here for historical reasons.
         """
-
         try:
-            # Project single-cell-data - user upload
-            if dataSource.lower()=="user-single":
-                parser = reqparse.RequestParser()
-                parser.add_argument('email', type=str, required=False)
-                parser.add_argument('data', type=werkzeug.datastructures.FileStorage, location='files')
-                args = parser.parse_args()
+            parser = reqparse.RequestParser()
+            parser.add_argument('name', type=str, required=False)  # selected Stemformatics dataset name (eg. Helft_2017_28723558)
+            parser.add_argument('test_name', type=str, required=False, default="test-data")  # user projected dataset name
+            parser.add_argument('test_sample_column', type=str, required=False)  # user projected sample column to use for mapping
+            # following returns a FileStorage object in this key
+            parser.add_argument('test_expression', type=werkzeug.datastructures.FileStorage, location='files')
+            parser.add_argument('test_samples', type=werkzeug.datastructures.FileStorage, location='files')
+            args = parser.parse_args()
 
-                now = datetime.now()
+            if dataSource.lower()=="stemformatics":
+                name = args.get('name').split("_")[0] # only take the author name for this
+                # Find dataset with same name from Stemformatics
+                publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
+                dsId = datasets.datasetIdFromName(args.get('name'), publicOnly=publicOnly)
+                ds = datasets.Dataset(dsId)
+                df = ds.expressionMatrix(key="genes" if ds.metadata()['platform_type']=='Microarray' else "raw")
+                samples = ds.samples()
+                # Select column to use - best column may not be cell_type though
+                column = 'cell_type'
+                for col in ['cell_type','sample_type','final_cell_type']:
+                    if len(samples[col].unique())>=2:  # use this
+                        column = col
+                        break
+                samples = samples.fillna('[not assigned]')
 
-                email = args.get('email')
-                df = pandas.read_csv(args.get('data'), sep='\t', index_col=0)
-                if len(df)==0:
-                    print('error')
-                    return {'error': 'The data matrix came back as zero length. Check its format.'}
-
-                # Create unique ID
-                id = uuid.uuid4()
-
-                # Check for unique ID in ids.tsv 
-                try:
-                    path = "/mnt/stemformatics-data/user_projection_data/ids.csv"
-                    ids_df = pandas.read_csv(path, index_col=0)
-                    unique = False
-                    
-                    # Loop until unique ID
-                    while not unique:
-                        if id in ids_df.index:
-                            id = uuid.uuid4()
-                        else:
-                            unique = True
-                    
-                    # Create file called ID
-                    new_path = "/mnt/stemformatics-data/user_projection_data/{}".format(id)
-                    if not os.path.exists(new_path):
-                        os.makedirs(new_path)
-                        
-                    # Save df to input
-                    df.to_csv(new_path + '/input.tsv', sep='\t')
-
-                    # Append details to ids.csv
-                    now = datetime.now()
-                    try:
-                        data = [id, email, atlasType, now.strftime('%d/%m/%Y %H:%M:%S'),'','']
-                        with open(path, 'a', newline='') as fd:
-                            writer_object = csv.writer(fd)
-                            writer_object.writerow(data)
-                            fd.close()
-                    except FileNotFoundError:
-                        print('File not found.')
-                    except IOError:
-                        print('File IO error.')
-                    except Exception as e:
-                        print(e)
-                    
-                    return
-                    
-
-                except IOError:
-                    print("Error: file does not exist.")
-                    return
-                
-            # Stemformatics or Bulk data options
             else:
-                parser = reqparse.RequestParser()
-                parser.add_argument('name', type=str, required=False)  # selected Stemformatics dataset name (eg. Helft_2017_28723558)
-                parser.add_argument('test_name', type=str, required=False, default="test-data")  # user projected dataset name
-                parser.add_argument('test_sample_column', type=str, required=False)  # user projected sample column to use for mapping
-                # following returns a FileStorage object in this key
-                parser.add_argument('test_expression', type=werkzeug.datastructures.FileStorage, location='files')
-                parser.add_argument('test_samples', type=werkzeug.datastructures.FileStorage, location='files')
-                args = parser.parse_args()
+                name = args.get('test_name')
+                df = pandas.read_csv(args.get('test_expression'), sep='\t', index_col=0)
+                samples = pandas.read_csv(args.get('test_samples'), sep='\t', index_col=0)
+                
+                # Check validation on the uploaded data files format
+                check = self.check_format(df, samples, args.get('test_sample_column'))
+                if check["error"] != "":
+                    return {"error": check["error"]}
+                
+                # Some validation on user supplied data
+                if len(df)==0:
+                    return {'error': 'The expression matrix came back as zero length. Check its format.'}
+                elif len(samples)==0:
+                    return {'error': 'The sample table came back as zero length. Check its format and ensure its row index match columns of expression matrix.'}
+                samples = samples.loc[df.columns]
+                column = args.get('test_sample_column')
+                
+                if column not in samples.columns: column = samples.columns[0]
+                
+            # Create atlas data instance
+            atlas = atlases.Atlas(atlasType)
 
+            # Perform projection
+            result = atlas.projection(name, df, includeCombinedCoords=False)
+            if result["error"] !="": # Returning empty data frame may cause exception when trying to parse as json, so just return error string
+                return {"error": result["error"]}
 
-                if dataSource.lower()=="stemformatics":
-                    name = args.get('name').split("_")[0] # only take the author name for this
-                    # Find dataset with same name from Stemformatics
-                    publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
-                    dsId = datasets.datasetIdFromName(args.get('name'), publicOnly=publicOnly)
-                    ds = datasets.Dataset(dsId)
-                    df = ds.expressionMatrix(key="genes" if ds.metadata()['platform_type']=='Microarray' else "raw")
-                    samples = ds.samples()
-                    # Select column to use - best column may not be cell_type though
-                    column = 'cell_type'
-                    for col in ['cell_type','sample_type','final_cell_type']:
-                        if len(samples[col].unique())>=2:  # use this
-                            column = col
-                            break
-                    samples = samples.fillna('[not assigned]')
+            # Prepare the dictionary to return - each object must be JSON serializable (so don't return data frame).
+            result["coords"] = result["coords"].to_dict(orient="records")
+            result["samples"] = samples.reset_index().fillna('').to_dict(orient="records")
+            result["sampleIds"] = ["%s_%s" % (name, item) for item in samples.index]
+            result["column"] = column
+            if "combinedCoords" in result:
+                result["combinedCoords"] = result["combinedCoords"].to_dict(orient="split")
+            if "capybara" in result:
+                for col in result["capybara"]:
+                    result["capybara"][col] = result["capybara"][col].to_dict(orient="split")
 
-                else:
-                    name = args.get('test_name')
-                    df = pandas.read_csv(args.get('test_expression'), sep='\t', index_col=0)
-                    samples = pandas.read_csv(args.get('test_samples'), sep='\t', index_col=0)
-                    
-                    # Check validation on the uploaded data files format
-                    check = self.check_format(df, samples, args.get('test_sample_column'))
-                    if check["error"] != "":
-                        return {"error": check["error"]}
-                    
-                    # Some validation on user supplied data
-                    if len(df)==0:
-                        return {'error': 'The expression matrix came back as zero length. Check its format.'}
-                    elif len(samples)==0:
-                        return {'error': 'The sample table came back as zero length. Check its format and ensure its row index match columns of expression matrix.'}
-                    samples = samples.loc[df.columns]
-                    column = args.get('test_sample_column')
-                    
-                    if column not in samples.columns: column = samples.columns[0]
-                    
-                # Create atlas data instance
-                atlas = atlases.Atlas(atlasType)
-
-                # Perform projection
-                result = atlas.projection(name, df, includeCombinedCoords=False)
-                if result["error"] !="": # Returning empty data frame may cause exception when trying to parse as json, so just return error string
-                    return {"error": result["error"]}
-
-                # Prepare the dictionary to return - each object must be JSON serializable (so don't return data frame).
-                result["coords"] = result["coords"].to_dict(orient="records")
-                result["samples"] = samples.reset_index().fillna('').to_dict(orient="records")
-                result["sampleIds"] = ["%s_%s" % (name, item) for item in samples.index]
-                result["column"] = column
-                if "combinedCoords" in result:
-                    result["combinedCoords"] = result["combinedCoords"].to_dict(orient="split")
-                if "capybara" in result:
-                    for col in result["capybara"]:
-                        result["capybara"][col] = result["capybara"][col].to_dict(orient="split")
-
-                return result
-            
+            return result
+        
         except:
             raise errors.DatasetProjectionFailedError
 

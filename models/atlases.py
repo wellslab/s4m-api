@@ -17,7 +17,7 @@ Examle usage:
 atlas = Atlas('myeloid')
 print(atlas.pcaCoordinates().head())
 """
-import os, pandas, json, numpy
+import os, pandas, json, numpy, random
 
 # ----------------------------------------------------------
 # Functions
@@ -133,15 +133,16 @@ class Atlas(object):
         filepath = os.path.join(self.atlasFilePath, "colours.json")
         return json.loads(open(filepath).read()) if os.path.exists(filepath) else {}
 
-    def projection(self, name, testData, includeCombinedCoords=True, includeCapybara=True):
-        """Perform projection of testData onto this atlas and return a dictionary of objects.
+    def projection(self, name, queryData, includeCombinedCoords=True, includeCapybara=True, includeRandomSamples=True):
+        """Perform projection of queryData onto this atlas and return a dictionary of objects.
         Params:
-            name (str): Name of the testData, used as prefix for projected points if includeCombinedCoords is True.
-            testData (DataFrame): Expression matrix of test data to be projected onto this atlas.
+            name (str): Name of the queryData, used as prefix for projected points if includeCombinedCoords is True.
+            queryData (DataFrame): Expression matrix of query data to be projected onto this atlas.
             includeCombinedCoords (bool): Should atlas coords and projected coords be returned together, rather than just projections?
+            includeRandomSamples (bool): If true, 3 random columns from queryData will have their row ids randomised, to provide "null" background. 
 
         Returns a dictionary with following keys and values:
-            coords (DataFrame): projected coordinates of testData.
+            coords (DataFrame): projected coordinates of queryData.
             combinedCoords (DataFrame): data frame of atlas coordinates + projected coords if includeCombinedCoords is True.
                 The projected points will have index in the format of "{name}_sample1", etc, so that these points
                 can be distinguished from atlas points.
@@ -151,32 +152,36 @@ class Atlas(object):
         result = {"error":"", "coords":pandas.DataFrame(), "name":name, "combinedCoords":pandas.DataFrame()}
 
         # Some validation before projecting
-        if len(testData)==0:
+        if len(queryData)==0:
             result["error"] = "Data to project appears to have 0 rows. Check format of the file."
 
         # Read expression matrix - we only need filtered version. 
         df = self.expressionMatrix(filtered=True)
         genes = self.geneInfo()
 
-        commonGenes = testData.index.intersection(df.index)  # common index between test and atlas
+        commonGenes = queryData.index.intersection(df.index)  # common index between test and atlas
 
-        if len(testData)!=len(set(testData.index)):
+        if len(queryData)!=len(set(queryData.index)):
             result["error"] = "This expression data contain duplicate index. Please remove these first."
 
         if len(commonGenes)==0:
-            result["error"] = "No genes common between test data and atlas, likely due to row ids not in Ensembl ids."
+            result["error"] = "No genes common between query data and atlas, likely due to row ids not being Ensembl ids."
             
         elif len(commonGenes)/len(genes[genes["inclusion"]])<0.5:
-            result["error"] = "Less than 50% of genes in test data are common with atlas ({} common)".format(len(commonGenes))
+            result["error"] = f"Less than 50% of genes in query data are common with atlas ({len(commonGenes)} common). This may lead to an unreliable result."
 
         if result["error"]!="":
             return result
 
-        # We reindex testData on df.index, not on commonGenes, since pca is done on df and not on commonGenes. 
-        # This means any genes in testData not found in df will be dropped, and any genes in df not found in testData will be assigned Nan
+        # We reindex queryData on df.index, not on commonGenes, since pca is done on df and not on commonGenes. 
+        # This means any genes in queryData not found in df will be dropped, and any genes in df not found in queryData will be assigned Nan
         # - we convert these to zero and live with this, as long as there aren't so many!
-        dfTest = rankTransform(testData.reindex(df.index).fillna(0))
-        #expression = pandas.concat([df, dfTest], axis=1)
+        dfQuery = rankTransform(queryData.reindex(df.index).fillna(0))
+
+        if includeRandomSamples:
+            n = 3 if len(dfQuery.columns)>2 else len(dfQuery.columns)  # max 3 random columns chosen from dfQuery
+            for i,col in enumerate(random.sample(dfQuery.columns.tolist(), n)):  # add new column based on values of these columns
+                dfQuery[f"random_{i}"] = random.sample(dfQuery[col].tolist(), len(dfQuery))
 
         # perform pca on atlas
         from sklearn.decomposition import PCA
@@ -184,7 +189,7 @@ class Atlas(object):
         coords = pandas.DataFrame(pca.fit_transform(df.values.T), index=df.columns)  # can also just run fit
         
         # make projection
-        result["coords"] = pandas.DataFrame(pca.transform(dfTest.values.T)[:,:3], index=dfTest.columns)
+        result["coords"] = pandas.DataFrame(pca.transform(dfQuery.values.T)[:,:3], index=dfQuery.columns)
 
         if includeCombinedCoords:   # also return row concatenated data frame of atlas+projection.
             projectedCoords = result['coords']
@@ -194,8 +199,14 @@ class Atlas(object):
             result['combinedCoords'] = pandas.concat([coords, projectedCoords])
 
         if includeCapybara:
-            cutoff = 0.01
-            capy = self.capybara(testData)
+            cutoff = 0.01   # drop any columns with max less than this, as these aren't useful.
+            
+            # Not sure if this works that well. Leave out for now.
+            # if includeRandomSamples:
+            #     for i,col in enumerate(random.sample(queryData.columns.tolist(), n)):  # add new column based on values of these columns
+            #         queryData[f"random_{i}"] = random.sample(queryData[col].tolist(), len(queryData))
+
+            capy = self.capybara(queryData)
             # drop columns with very low values
             for column,df in capy.items():
                 df = df[[col for col in df.columns if df[col].max()>cutoff]]
@@ -260,7 +271,7 @@ class Atlas(object):
 # ----------------------------------------------------------
 def test_atlas():
     """Run tests for the current files in the atlas.
-    Since we can't pass an argument to this function through nosetests, use environ variables
+    Since we can't pass an argument to this function through nosetests, use environ variables to test for a particular atlas type.
     > export ATLAS_TYPE=dc
     (don't forget to also export ATLAS_FILEPATH=/path/to/atlas/files)
     """
@@ -323,20 +334,9 @@ def test_capybara():
     assert output['Cell Type'].at['2000_1699538155_A','monocyte']<0.001
     assert round(output['Cell Type'].at['2000_1699538155_C','cDC1']*100)==48
 
-def test_projectSingleCellData():
-    print(list(atlasTypes().keys()))
-
 def test_rankTransform():
     #df = pandas.DataFrame([[0, 0, 0, 3, 5, 7, 11]]).transpose()
     df = pandas.DataFrame([[2,2,5,10]]).transpose()
     print((df.rank(axis=0, ascending=True, na_option='bottom')-1)/(df.shape[0]-1))
     print(df.shape[0] - df.rank(axis=0, ascending=False, na_option='bottom')+1)
     print(rankTransform(df))
-
-def reorderSampleColumns():
-    atlas = Atlas('myeloid')
-    path = os.path.join(atlas.atlasFilePath, "samples.tsv")
-    print(path)
-    df = atlas.sampleMatrix()
-    df = df[['Cell Type', 'Sample Source', 'Progenitor Type', 'Activation Status', 'Tissue', 'Disease State', 'Platform Category']]
-    df.to_csv(path, sep='\t')
