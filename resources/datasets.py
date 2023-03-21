@@ -239,8 +239,8 @@ class DatasetSearch(Resource):
         projects = args.get('projects').split(',') if args.get('projects') else []
         organism = args.get('organism').split(',') if args.get('organism') else []
         if (datasetIds is None or len(datasetIds)>0) and (platformType or projects or organism):
-                ids = datasets.datasetIdsFromFields(platform_type=platformType, projects=projects, organism=organism)
-                datasetIds = ids if datasetIds is None else datasetIds.intersection(set(ids))
+            ids = datasets.datasetIdsFromFields(platform_type=platformType, projects=projects, organism=organism)
+            datasetIds = ids if datasetIds is None else datasetIds.intersection(set(ids))
 
         # When we fetch the data frame, apply public/private status
         publicOnly = auth.AuthUser().username()==None  # public datasets only if authenticated username returns None
@@ -350,11 +350,12 @@ class SampleSearch(Resource):
 
 class Values(Resource):
     def get(self, collection, key):
-        """Return all values for a key (=field) in the datasets collection.
+        """Return all values for a key (=field) in either datasets or samples collection.
         """
         parser = reqparse.RequestParser()
         parser.add_argument('include_count', type=str, required=False, default="false")
-        parser.add_argument('organism', type=str, required=False, default="homo sapiens")  # use 'all' to fetch all organisms
+        # If fetching all available values for organism, we should use all, else default is human.
+        parser.add_argument('organism', type=str, required=False, default="all" if key=="organism" else "homo sapiens")  
         args = parser.parse_args()
 
         if collection not in ['datasets','samples']:

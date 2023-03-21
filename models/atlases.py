@@ -232,17 +232,20 @@ class Atlas(object):
         
         from cvxopt import matrix, solvers
         solvers.options['show_progress'] = False
+        #solvers.options['abstol'] = 1.e-10
+        #solvers.options['reltol'] = 1.e-10
+        #solvers.options['feastol'] = 1.e-10
 
-        # Get reference and query matrices and subset both on columns of 
+        # Get reference and query matrices and subset both on columns of
         df = self.expressionMatrix(filtered=True)
         samples = self.sampleMatrix()
         df = df[samples.index]  # subset columns on index of samples (shouldn't have to be done for atlas, but just in case)
         query = query.loc[df.index.intersection(query.index)]
         df = df.loc[query.index]
-
+    
         if rankNormalise:
             query = rankTransform(query)
-
+    
         result = {}
         for column in samples.columns:
             anno = samples[column]
@@ -256,14 +259,26 @@ class Atlas(object):
             h = matrix(0.0, (n,1))
             A = matrix(1.0, (1,n))
             b = matrix(1.0)
+            ##########
+            # New code for Jarny here, PA
+            G = matrix(numpy.vstack((G,A)).astype(numpy.double))
+            h = matrix(numpy.vstack((h,b)).astype(numpy.double)) 
+            ##########
             cell_score = pandas.DataFrame(columns=anno.unique(), index=query.columns)
             for i in range(query.shape[1]):
                 y = -1.0*query.iloc[:,i].values.astype(numpy.double)
                 q = matrix(numpy.matmul(reference.values, y).astype(numpy.double))
-                solution = solvers.qp(P, q, G, h, A, b, show_progress=False)
-                cell_score.iloc[i,:] = numpy.array(solution['x']).reshape(-1)
+                ##########
+                # New code for Jarny here, PA
+                # I included a numpy.round because the tiny negative residuals were annoying me
+                solution = solvers.qp(P, q, G, h, show_progress=False)
+                cell_score.iloc[i,:] = numpy.round(numpy.array(solution['x']).reshape(-1),6)
+                ##########
+                # Old code for comparison
+                #solution = solvers.qp(P, q, G, h, A, b, show_progress=False)
+                #cell_score.iloc[i,:] = numpy.array(solution['x']).reshape(-1)
             result[column] = cell_score
-
+    
         return result
 
 # ----------------------------------------------------------
@@ -319,8 +334,8 @@ def test_projection():
     ds = datasets.Dataset(2000)
     df = ds.expressionMatrix(key='genes')
     res = atlas.projection('test', df, includeCombinedCoords=False)
-    assert res['coords'].shape == (124,3)
-    assert round(res['capybara']['Cell Type'].at['2000_1699538155_A','cDC1']*1000)==408
+    assert res['coords'].shape == (127,3)  # dataset has 124 samples but we added 3 random samples
+    assert round(res['capybara']['Cell Type'].at['2000_1699538155_A','cDC1']*1000)==351
 
 def test_capybara():
     from models import datasets

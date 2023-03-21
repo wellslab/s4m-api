@@ -31,7 +31,7 @@ database = mongoClient()["dataportal"]
 # These datasets have entries in the metadata table but are not ready to be exposed to the public - such as 6131, 
 # which is not in the normal format. Hence by default, datasetMetadataFromDatasetIds() function here 
 # will exclude this hard coded list of datasets. You can still access these by using Dataset() initialiser.
-_exclude_list = [5002, 6056, 6127, 6130, 6131, 6149, 6150, 6151, 6155, 6187, 6197, 6198, 6368, 6655, 6701, 6754, 6776, 6948, 7012, 7115, 7209, 7217, 7218, 7250, 7311, 7401]
+_exclude_list = [5002, 6056, 6127, 6130, 6131, 6149, 6150, 6151, 6155, 6187, 6197, 6198, 6368, 6655, 6701, 6754, 6776, 6948, 7012, 7115, 7250, 7311, 7401]
 
 # ----------------------------------------------------------
 # Functions
@@ -92,7 +92,7 @@ def datasetIdsFromFields(platform_type=[], projects=[], organism=['homo sapiens'
                 params["projects"] = {"$in":projects}
         if publicOnly:
             params['private'] = False
-
+        
         if params:
             cursor = database["datasets"].find(params, {"dataset_id":1, "_id":0})
             ids = set([item["dataset_id"] for item in cursor])
@@ -539,7 +539,8 @@ def test_datasetIdsFromQuery():
     datasetIds = datasetIdsFromQuery('')
     assert len(datasetIds)==0
     datasetIds = datasetIdsFromQuery('*')
-    assert len(datasetIds)==661
+    print(len(datasetIds))
+    assert len(datasetIds)>661
     datasetIds = datasetIdsFromQuery(query_string='abud', include_samples_query=True)
     assert datasetIds==[7268]
 

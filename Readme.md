@@ -49,6 +49,10 @@ Authentication including token generation
 https://scotch.io/tutorials/build-a-restful-api-with-flask-the-tdd-way-part-2
 https://realpython.com/token-based-authentication-with-flask/#jwt-setup
 
+To access a private resource using auth token, copy the token from /datasets/governance and add auth_token key into the URL (value starts after "Bearer"):
+https://api-dev.stemformatics.org/datasets/9762/samples?as_file=true&auth_token=eyJ0eXAiOiJKV1QiL...
+
+
 If the api suddenly starts returning 400 bad request, it could be that werkzeug got upgraded. See [here](https://stackoverflow.com/questions/72157708/flask-restx-request-parser-returns-400-bad-request/72174259#72174259). This can be fixed by:
 ```bash
 conda install werkzeug=2.0.*
