@@ -26,19 +26,21 @@ def _getSSH():
     return _ssh
 
 def rsyncFiles():
-    """Expression files are copied from source server using rsync.
+    """Expression files are copied from source server using rsync. 
+    Example rsync usage on command line (note trailing / on the source directory!):
+    rsync -avz dev.stemformatics.org:/mnt/stemformatics-data/atlas/ /mnt/stemformatics-data/atlas
     """
     answer = input("rsync expression files? [N]/y ")
     if (answer=='y'):
         filepath = os.environ['EXPRESSION_FILEPATH']
-        command = ["rsync","-avz",f"{source}.stemformatics.org:{filepath}/",f"{filepath}/"]
+        command = ["rsync","-avz",f"{source}.stemformatics.org:{filepath}/", filepath]
         print(subprocess.list2cmdline(command))
         process = subprocess.run(command)
 
     answer = input("rsync atlas files? [N]/y ")
     if (answer=='y'):
         filepath = os.environ['ATLAS_FILEPATH']
-        command = ["rsync","-avz",f"{source}.stemformatics.org:{filepath}/",f"{filepath}/"]
+        command = ["rsync","-avz",f"{source}.stemformatics.org:{filepath}/", filepath]
         print(subprocess.list2cmdline(command)) 
         process = subprocess.run(command)
 

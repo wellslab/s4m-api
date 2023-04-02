@@ -69,7 +69,7 @@ class Atlas(object):
     """
 
     # Full list of current atlas types
-    all_atlas_types = ['myeloid','blood','dc','activation']
+    all_atlas_types = ['myeloid','blood','dc','activation','ma']
 
     def __init__(self, atlasType, version=None):
         # each atlas type is under its own directory under ATLAS_FILEPATH
