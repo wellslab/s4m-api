@@ -3,7 +3,7 @@ Gene expression analysis related resources here.
 """
 from flask_restful import reqparse, Resource
 import os, pandas
-from models import genes, datasets
+from models import genes, atlases
 from resources.datasets import protectedDataset, DatasetSearch
 
 # def geneSymbolsFromGeneIds(geneIds):
@@ -45,62 +45,133 @@ class GeneToSampleGroups(Resource):
         result = genes.geneToSampleGroups(args.get('gene_id'), args.get('sample_group'))
         return result.to_dict(orient='index')
 
+"""Return index of df after hierarchical clustering the rows"""
+def hclusteredRows(df):
+    from scipy.cluster.hierarchy import linkage, dendrogram
+    from scipy.spatial.distance import pdist, squareform
+    clust = linkage(squareform(pdist(df.values, metric='euclidean')), method='complete')
+    dendro = dendrogram(clust, no_plot=True)
+    return df.index[dendro['leaves']]
 
-class GenesetCollection(Resource):
+class GenesetTable(Resource):
     def get(self):
+        #from scipy.stats import zscore
         parser = reqparse.RequestParser()
-        parser.add_argument('name', type=str, required=False)
-        parser.add_argument('dataset_id', type=int, required=False)
-        parser.add_argument('sample_group', type=int, required=False, default='cell_type')
+        parser.add_argument('geneset_group', type=str, required=False, default='DE genes') # ['DE genes','Hallmark','WGCNA']
+        parser.add_argument('geneset', type=str, required=False)
+        parser.add_argument('timepoint', type=str, required=False, default='2h')
+        parser.add_argument('cluster_columns', type=str, required=False, default='false')
         args = parser.parse_args()
 
-        if args.get('name') is None: # return a list of current geneset names
-            return genes.allGenesets()
-        elif args.get('dataset_id') is None: # return dataset ids for named geneset
-            return genes.genesetFromName(args.get('name'))
-        else:   # return details about particular geneset and dataset combo
-            geneset = genes.genesetFromName(args.get('name'))
-            #geneIds = list(geneset['geneSymbolsFromId'].keys())
-            ds = protectedDataset(args.get('dataset_id'))
-            exp = ds.expressionMatrix(key='cpm', applyLog2=True)
+        gs = genes.genesetTable(genesetGroup=args.get('geneset_group')).fillna('')
+        genesetName = args.get('geneset') if args.get('geneset') else gs.index[0]
+        timepoint = args.get('timepoint')
+        genelist = gs.at[genesetName, 'genes'].split(',')
+        clusterColumns = args.get('cluster_columns').lower().startswith('t')
 
-            # Now we subset exp on geneset. There may be multiple gene symbols per gene id, 
-            # but we just choose the one with most variance
-            selectedGeneIds, selectedGeneSymbols = [], []
-            for geneSymbol,geneIds in geneset['geneIdsFromSymbol'].items():
-                df = exp.loc[exp.index.intersection(geneIds)]
-                if len(df)>0:
-                    selectedGeneIds.append(df.var(axis=1).sort_values().index[-1])
-                    selectedGeneSymbols.append(geneSymbol)
+        # Read sample table and subset on timepoint
+        atl = atlases.Atlas('ma')
+        samples = atl.sampleMatrix()
+        #samples = samples[(samples['treatment']==treatment) | (samples['treatment']=='NS')]
+        samples = samples[samples['time']==timepoint]
 
-            df = exp.loc[selectedGeneIds]
-            samples = ds.samples().fillna('')
+        # Read expression matrix and subset on genes and samples
+        df = atl.expressionMatrix().loc[genelist, samples.index]
 
-            from scipy.stats import zscore
-            zscores = pandas.DataFrame([zscore(df.loc[rowId]) for rowId in df.index], index=df.index, columns=df.columns).fillna(0)
+        # Substitute gene symbols
+        geneSymbolFromId = atl.geneInfo().loc[genelist, 'symbol'].fillna('').to_dict()
+        geneSymbols = [geneSymbolFromId.get(geneId, geneId) for geneId in df.index]
 
-            # cluster rows and columns based on zscore
-            from scipy.spatial.distance import pdist, squareform
-            import scipy.cluster.hierarchy as hc
+        # group by treatment (at this timepoint) and work out the mean
+        df = df[samples.index].groupby(samples['treatment'], axis=1).mean()#.apply(zscore, axis=1)
+        df = df.sub(df['NS'], axis=0)
+        df = df.loc[hclusteredRows(df)]
 
-            rowDist = squareform(pdist(zscores.to_numpy()))
-            rowOrdering = hc.leaves_list(hc.linkage(rowDist, method='centroid'))
+        # sort columns, either by treatment type or by hcluster. NS is always first
+        orderedColumns = ['NS']
+        if clusterColumns:
+            for item in hclusteredRows(df.drop(columns=['NS']).transpose()):
+                orderedColumns.append(item)
+        else:
+            for treatmentType in samples['type'].unique():
+                for item in samples[samples['type']==treatmentType]['treatment'].unique():
+                    if item!='NS': orderedColumns.append(item)
+        df = df[orderedColumns]
 
-            colDist = squareform(pdist(zscores.transpose().to_numpy()))
-            colOrdering = hc.leaves_list(hc.linkage(colDist, method='centroid'))
+        #print(samples.head())
+        #print(df.shape)
+        return {'genesets':gs[['description']].reset_index().to_dict(orient='records'), 
+                'expression':df.to_dict(orient='split'),
+                'geneSymbols':geneSymbols}
 
-            zscores = zscores.iloc[rowOrdering, colOrdering]
+        # Change the format of the data
+        df = pandas.DataFrame(columns=['2h','6h','16h'])
+        df.index.name = 'name'
 
-            # Relabel columns to 'xxx_1','xxx_2', etc, where xxx is the sample group item
-            sampleGroupItems = samples.loc[zscores.columns][args.get('sample_group')]
-            uniqueItems = dict([(item,[]) for item in sampleGroupItems.unique()])
-            columns = []
-            for item in sampleGroupItems:
-                columns.append("%s_%s" % (item, len(uniqueItems[item])))
-                uniqueItems[item].append(item)
-            zscores.columns = columns
-            zscores.index = selectedGeneSymbols
-            return zscores.to_dict(orient='split')
+        treatments = list(set(['_'.join(item.split('_')[:-1]) for item in gs.index]))
+        for treatment in treatments:
+            for col in df.columns:
+                genelist = gs.at[f"{treatment}_{col}",'genes']
+                df.at[treatment, col] = genelist.split(',') if len(genelist)>0 else []
+
+        return df.reset_index().to_dict(orient='records')
+    
+# Not used for now
+# class GenesetCollection(Resource):
+#     def get(self):
+#         parser = reqparse.RequestParser()
+#         parser.add_argument('name', type=str, required=False)
+#         parser.add_argument('dataset_id', type=int, required=False)
+#         parser.add_argument('sample_group', type=int, required=False, default='cell_type')
+#         args = parser.parse_args()
+
+#         if args.get('name') is None: # return a list of current geneset names
+#             return genes.allGenesets()
+#         elif args.get('dataset_id') is None: # return dataset ids for named geneset
+#             return genes.genesetFromName(args.get('name'))
+#         else:   # return details about particular geneset and dataset combo
+#             geneset = genes.genesetFromName(args.get('name'))
+#             #geneIds = list(geneset['geneSymbolsFromId'].keys())
+#             ds = protectedDataset(args.get('dataset_id'))
+#             exp = ds.expressionMatrix(key='cpm', applyLog2=True)
+
+#             # Now we subset exp on geneset. There may be multiple gene symbols per gene id, 
+#             # but we just choose the one with most variance
+#             selectedGeneIds, selectedGeneSymbols = [], []
+#             for geneSymbol,geneIds in geneset['geneIdsFromSymbol'].items():
+#                 df = exp.loc[exp.index.intersection(geneIds)]
+#                 if len(df)>0:
+#                     selectedGeneIds.append(df.var(axis=1).sort_values().index[-1])
+#                     selectedGeneSymbols.append(geneSymbol)
+
+#             df = exp.loc[selectedGeneIds]
+#             samples = ds.samples().fillna('')
+
+#             from scipy.stats import zscore
+#             zscores = pandas.DataFrame([zscore(df.loc[rowId]) for rowId in df.index], index=df.index, columns=df.columns).fillna(0)
+
+#             # cluster rows and columns based on zscore
+#             from scipy.spatial.distance import pdist, squareform
+#             import scipy.cluster.hierarchy as hc
+
+#             rowDist = squareform(pdist(zscores.to_numpy()))
+#             rowOrdering = hc.leaves_list(hc.linkage(rowDist, method='centroid'))
+
+#             colDist = squareform(pdist(zscores.transpose().to_numpy()))
+#             colOrdering = hc.leaves_list(hc.linkage(colDist, method='centroid'))
+
+#             zscores = zscores.iloc[rowOrdering, colOrdering]
+
+#             # Relabel columns to 'xxx_1','xxx_2', etc, where xxx is the sample group item
+#             sampleGroupItems = samples.loc[zscores.columns][args.get('sample_group')]
+#             uniqueItems = dict([(item,[]) for item in sampleGroupItems.unique()])
+#             columns = []
+#             for item in sampleGroupItems:
+#                 columns.append("%s_%s" % (item, len(uniqueItems[item])))
+#                 uniqueItems[item].append(item)
+#             zscores.columns = columns
+#             zscores.index = selectedGeneSymbols
+#             return zscores.to_dict(orient='split')
 
 
 # class Geneset(Resource):

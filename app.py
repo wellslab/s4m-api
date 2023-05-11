@@ -51,13 +51,14 @@ api.add_resource(datasets.Download, '/download')
 api.add_resource(genes.SampleGroupToGenes, '/genes/sample-group-to-genes')
 api.add_resource(genes.GeneToSampleGroups, '/genes/gene-to-sample-groups')
 #api.add_resource(genes.GenesetCollection, '/genes/geneset-collection')
+# Gene sets
+api.add_resource(genes.GenesetTable, '/genes/geneset-table')
 
 # Atlas data
 api.add_resource(atlases.AtlasTypes, '/atlas-types')
 api.add_resource(atlases.Atlas, '/atlases/<atlasType>/<item>')
 api.add_resource(atlases.AtlasProjection, '/atlas-projection/<atlasType>/<dataSource>')
 #api.add_resource(atlases.AtlasProjectionResults, '/atlas-projection-results')
-
 
 # API for authentication
 api.add_resource(auth.AuthLogin, '/auth/login')

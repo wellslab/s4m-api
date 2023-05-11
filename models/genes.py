@@ -161,6 +161,10 @@ def geneToSampleGroups(geneId, sampleGroup='cell_type'):
 # ----------------------------------------------------------
 # Geneset methods - not used currently
 # ----------------------------------------------------------
+def genesetTable(genesetGroup='DE genes'):
+    filenameFromGenesetGroup = {'DE genes':'differential_up', 'Hallmark':'hallmark', 'WGCNA':'WGCNA'}
+    return pandas.read_csv(f"/mnt/stemformatics-data/genesets/gene_sets_{filenameFromGenesetGroup[genesetGroup]}.tsv", sep="\t", index_col=0)
+
 def scoreGeneset():
     """
     """
