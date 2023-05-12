@@ -78,14 +78,14 @@ class GenesetTable(Resource):
         # Read expression matrix and subset on genes and samples
         df = atl.expressionMatrix().loc[genelist, samples.index]
 
-        # Substitute gene symbols
-        geneSymbolFromId = atl.geneInfo().loc[genelist, 'symbol'].fillna('').to_dict()
-        geneSymbols = [geneSymbolFromId.get(geneId, geneId) for geneId in df.index]
-
         # group by treatment (at this timepoint) and work out the mean
         df = df[samples.index].groupby(samples['treatment'], axis=1).mean()#.apply(zscore, axis=1)
         df = df.sub(df['NS'], axis=0)
         df = df.loc[hclusteredRows(df)]
+
+        # Substitute gene symbols
+        geneSymbolFromId = atl.geneInfo().loc[genelist, 'symbol'].fillna('').to_dict()
+        geneSymbols = [geneSymbolFromId.get(geneId, geneId) for geneId in df.index]
 
         # sort columns, either by treatment type or by hcluster. NS is always first
         orderedColumns = ['NS']
