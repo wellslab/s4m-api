@@ -53,68 +53,84 @@ def hclusteredRows(df):
     dendro = dendrogram(clust, no_plot=True)
     return df.index[dendro['leaves']]
 
-class GenesetTable(Resource):
+class GenesetCollections(Resource):
+    """Return a list of gene sets available or details for a specified gene set.
+    Each gene set has a name, description and a list of gene ids (Ensembl ids).
+    A gene set collection is a group of related gene sets stored together (eg. Hallmark), and each collection also has a name.
+    Each collection is basically a data frame with columns ['name','description','geneIds'], where geneIds are 
+    comma separated list of Ensembl gene ids.
+    If called with no arguments, just return a dictionary of gene set collections:
+        {'Hallmark': [{'name':'HALLMARK_ADIPOGENESIS', 'description':'...'}, ...], ...}
+    If called with collection_name and geneset_name, return a list of gene ids
+        ['ENSGxxxxxx',...]
+    """
     def get(self):
-        #from scipy.stats import zscore
         parser = reqparse.RequestParser()
-        parser.add_argument('geneset_group', type=str, required=False, default='DE genes') # ['DE genes','Hallmark','WGCNA']
-        parser.add_argument('geneset', type=str, required=False)
-        parser.add_argument('timepoint', type=str, required=False, default='2h')
-        parser.add_argument('cluster_columns', type=str, required=False, default='false')
+        parser.add_argument('collection_name', type=str, required=False)
+        parser.add_argument('geneset_name', type=str, required=False)
         args = parser.parse_args()
 
-        gs = genes.genesetTable(genesetGroup=args.get('geneset_group')).fillna('')
-        genesetName = args.get('geneset') if args.get('geneset') else gs.index[0]
-        timepoint = args.get('timepoint')
-        genelist = gs.at[genesetName, 'genes'].split(',')
-        clusterColumns = args.get('cluster_columns').lower().startswith('t')
+        collections = {}
+        for name,df in genes.genesetCollections().items():
+            if name==args.get('collection_name'):  # fetch matching gene ids
+                if args.get('geneset_name') in df.index:
+                    return df.at[args.get('geneset_name'), 'geneIds'].split(',')
+                else: # matching gene set name not found in this collection
+                    return {}
+            # Otherwise just fetch name (=index) and description for all gene sets
+            collections[name] = df.iloc[:,:1].reset_index().to_dict(orient='records')
+        return collections
 
-        # Read sample table and subset on timepoint
-        atl = atlases.Atlas('ma')
-        samples = atl.sampleMatrix()
-        #samples = samples[(samples['treatment']==treatment) | (samples['treatment']=='NS')]
-        samples = samples[samples['time']==timepoint]
+# class GenesetTable(Resource):
+#     def get(self):
+#         #from scipy.stats import zscore
+#         parser = reqparse.RequestParser()
+#         parser.add_argument('geneset_group', type=str, required=False, default='DE genes') # ['DE genes','Hallmark','WGCNA']
+#         parser.add_argument('geneset', type=str, required=False)
+#         parser.add_argument('timepoint', type=str, required=False, default='2h')
+#         parser.add_argument('cluster_columns', type=str, required=False, default='false')
+#         args = parser.parse_args()
 
-        # Read expression matrix and subset on genes and samples
-        df = atl.expressionMatrix().loc[genelist, samples.index]
+#         gs = genes.genesetTable(genesetGroup=args.get('geneset_group')).fillna('')
+#         genesetName = args.get('geneset') if args.get('geneset') else gs.index[0]
+#         timepoint = args.get('timepoint')
+#         genelist = gs.at[genesetName, 'genes'].split(',')
+#         clusterColumns = args.get('cluster_columns').lower().startswith('t')
 
-        # group by treatment (at this timepoint) and work out the mean
-        df = df[samples.index].groupby(samples['treatment'], axis=1).mean()#.apply(zscore, axis=1)
-        df = df.sub(df['NS'], axis=0)
-        df = df.loc[hclusteredRows(df)]
+#         # Read sample table and subset on timepoint
+#         atl = atlases.Atlas('ma')
+#         samples = atl.sampleMatrix()
+#         #samples = samples[(samples['treatment']==treatment) | (samples['treatment']=='NS')]
+#         samples = samples[samples['time']==timepoint]
 
-        # Substitute gene symbols
-        geneSymbolFromId = atl.geneInfo().loc[genelist, 'symbol'].fillna('').to_dict()
-        geneSymbols = [geneSymbolFromId.get(geneId, geneId) for geneId in df.index]
+#         # Read expression matrix and subset on genes and samples
+#         df = atl.expressionMatrix().loc[genelist, samples.index]
 
-        # sort columns, either by treatment type or by hcluster. NS is always first
-        orderedColumns = ['NS']
-        if clusterColumns:
-            for item in hclusteredRows(df.drop(columns=['NS']).transpose()):
-                orderedColumns.append(item)
-        else:
-            for treatmentType in samples['type'].unique():
-                for item in samples[samples['type']==treatmentType]['treatment'].unique():
-                    if item!='NS': orderedColumns.append(item)
-        df = df[orderedColumns]
+#         # group by treatment (at this timepoint) and work out the mean
+#         df = df[samples.index].groupby(samples['treatment'], axis=1).mean()#.apply(zscore, axis=1)
+#         df = df.sub(df['NS'], axis=0)
+#         df = df.loc[hclusteredRows(df)]
 
-        #print(samples.head())
-        #print(df.shape)
-        return {'genesets':gs[['description']].reset_index().to_dict(orient='records'), 
-                'expression':df.to_dict(orient='split'),
-                'geneSymbols':geneSymbols}
+#         # Substitute gene symbols
+#         geneSymbolFromId = atl.geneInfo().loc[genelist, 'symbol'].fillna('').to_dict()
+#         geneSymbols = [geneSymbolFromId.get(geneId, geneId) for geneId in df.index]
 
-        # Change the format of the data
-        df = pandas.DataFrame(columns=['2h','6h','16h'])
-        df.index.name = 'name'
+#         # sort columns, either by treatment type or by hcluster. NS is always first
+#         orderedColumns = ['NS']
+#         if clusterColumns:
+#             for item in hclusteredRows(df.drop(columns=['NS']).transpose()):
+#                 orderedColumns.append(item)
+#         else:
+#             for treatmentType in samples['type'].unique():
+#                 for item in samples[samples['type']==treatmentType]['treatment'].unique():
+#                     if item!='NS': orderedColumns.append(item)
+#         df = df[orderedColumns]
 
-        treatments = list(set(['_'.join(item.split('_')[:-1]) for item in gs.index]))
-        for treatment in treatments:
-            for col in df.columns:
-                genelist = gs.at[f"{treatment}_{col}",'genes']
-                df.at[treatment, col] = genelist.split(',') if len(genelist)>0 else []
-
-        return df.reset_index().to_dict(orient='records')
+#         #print(samples.head())
+#         #print(df.shape)
+#         return {'genesets':gs[['description']].reset_index().to_dict(orient='records'), 
+#                 'expression':df.to_dict(orient='split'),
+#                 'geneSymbols':geneSymbols}
     
 # Not used for now
 # class GenesetCollection(Resource):

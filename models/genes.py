@@ -159,12 +159,37 @@ def geneToSampleGroups(geneId, sampleGroup='cell_type'):
     return result
 
 # ----------------------------------------------------------
-# Geneset methods - not used currently
+# Geneset methods
 # ----------------------------------------------------------
+def genesetCollections(collectionName=None, genesetName=None):
+    """Return a dictionary keyed on geneset collection names, where values are pandas data frames which correspond to details of
+    that collection. If collectionName is specified, only return the data frame matching the name. If genesetName is further
+    specified, return a list of gene ids (Ensemble ids) matching the genesetName.
+    """
+    # All files with names GSC_xxx are relevant for this
+    collections = {}
+    for filename in os.listdir(os.environ['GENESET_FILEPATH']):
+        if filename.startswith('GSC_'):
+            name = filename.replace("GSC_","").replace(".tsv","")
+            df = pandas.read_csv(os.path.join(os.environ['GENESET_FILEPATH'], filename), sep="\t", index_col=0)
+            if collectionName==name:
+                if genesetName is None: # collection name specified but no genesetName
+                    return df
+                else:
+                    return df.at[genesetName, 'geneIds'].split(',')
+            else:
+                collections[name] = df
+    return collections
+
 def genesetTable(genesetGroup='DE genes'):
     filenameFromGenesetGroup = {'DE genes':'differential_up', 'Hallmark':'hallmark', 'WGCNA':'WGCNA'}
-    return pandas.read_csv(f"/mnt/stemformatics-data/genesets/gene_sets_{filenameFromGenesetGroup[genesetGroup]}.tsv", sep="\t", index_col=0)
+    return pandas.read_csv(f"{os.environ['GENESET_FILEPATH']}/gene_sets_{filenameFromGenesetGroup[genesetGroup]}.tsv", sep="\t", index_col=0)
 
+# ----------------------------------------------------------
+# Archived methods
+# ----------------------------------------------------------
+"""Below are methods which aren't used in the application currently but were prototyped at one stage.
+"""
 def scoreGeneset():
     """
     """
@@ -313,6 +338,14 @@ def test_geneToSampleGroups():
     df = geneToSampleGroups('ENSG00000118513')
     assert round(df.loc['B lymphocyte','score'][0])==39
     assert round(df.loc['Jurkat','datasetIds'][0])==6245
+    
+def test_genesetCollections():
+    gsc = genesetCollections()
+    assert 'Hallmark' in gsc
+    df = genesetCollections(collectionName='Hallmark')
+    assert 'HALLMARK_ANGIOGENESIS' in df.index
+    geneIds = genesetCollections(collectionName='Hallmark', genesetName='HALLMARK_ANGIOGENESIS')
+    assert len(geneIds)==27
     
 def test_scoreGeneset():
     scoreGeneset()

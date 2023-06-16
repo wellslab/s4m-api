@@ -39,6 +39,23 @@ def rankTransform(df):
     """
     return (df.shape[0] - df.rank(axis=0, ascending=False, na_option='bottom')+1)/df.shape[0]
 
+def hclusteredRows(df):
+    """Return index of df after hierarchical clustering the rows.
+    So use df = df.loc[hclusteredRows(df)] to change index after hclust.
+    Seem to get "The symmetric non-negative hollow observation matrix looks suspiciously like an uncondensed distance matrix" warning
+    for linkage function, even though squereform is called beforehand. So just ignoring this warning here.
+    """
+    from scipy.cluster.hierarchy import linkage, dendrogram, ClusterWarning
+    from scipy.spatial.distance import pdist, squareform
+    from warnings import simplefilter
+    simplefilter("ignore", ClusterWarning)
+
+    #clust = linkage(squareform(pdist(df.values, metric='euclidean')), method='complete')
+    sf = squareform(pdist(df.values, metric='euclidean'))
+    clust = linkage(sf, method='complete')
+    dendro = dendrogram(clust, no_plot=True)
+    return df.index[dendro['leaves']]
+
 def atlasTypes():
     """Return a dictionary of available atlas types and versions.
         {'dc': {'versions': ['1.3', '1.2', '1.1'], 'current_version': '1.3', 'release_notes': 'Updated xxx...'}, ...}
@@ -281,6 +298,62 @@ class Atlas(object):
     
         return result
 
+    def heatmapData(self, geneIds=[], clusterColumns=False, groupby=None, subsetby=None, subsetbyItem=None, relativeValue='zscore'):
+        """Return a data frame which is suitable for rendering a heatmap (though it could be used in other cases) by specifying geneIds (Ensembl ids). 
+        Columns are sorted according to specified ordering in the atlas or hierarchically clustered if clusterColumns is True. 
+        """
+        geneInfo = self.geneInfo()
+
+        if len(geneIds)==0: return {}
+        if not geneIds[0].startswith("ENS"): # assume that gene ids are symbols - we can actually work out ids from geneInfo
+            geneIds = geneInfo[geneInfo['symbol'].isin(geneIds)].index.tolist()
+            
+        # Split geneIds into genes found/not found in the atlas, then filtered/unfiltered
+        filtered = set(geneIds).intersection(set(geneInfo[geneInfo['inclusion']].index))
+        unfiltered = set(geneIds).intersection(set(geneInfo[~geneInfo['inclusion']].index))
+        notFound = set(geneIds).difference(filtered.union(unfiltered))
+
+        # Work out subset of expression matrix to use
+        df = self.expressionMatrix(filtered=True).loc[list(filtered)]
+        samples = self.sampleMatrix()
+
+        # Apply any subsetby
+        if subsetby is not None:
+            samples = samples[samples[subsetby]==subsetbyItem]
+            df = df[samples.index]
+
+        # Apply any groupby (eg. if groupby='treatment', mean of samples for each treatment will be calculated)
+        if groupby is not None:
+            df = df[samples.index].groupby(samples[groupby], axis=1).mean()
+
+        if len(df.columns)<=1:  # application of subset + groupby reduced the matrix too much
+            return {'dataframe':pandas.DataFrame(), 'error':'Not enough samples to render a heatmap.'}
+        
+        # Apply values relative to relativeValue
+        if relativeValue=='zscore':  # use zscore on each row
+            from scipy.stats import zscore
+            df = df.apply(zscore, axis=1)
+        elif relativeValue in df.columns:  # subtract this for each value
+            df = df.sub(df[relativeValue], axis=0)
+        
+        # Ordering of the columns of df may be specified or clustered
+        ordered = self.coloursAndOrdering()['ordering']
+        if clusterColumns:
+            df = df[hclusteredRows(df.transpose())]
+        elif groupby in ordered: # use ordering specified
+            df = df[ordered[groupby]]
+
+        if relativeValue in df.columns: # Ensure that relativeValue is the first column
+            columns = df.columns.tolist()
+            columns.remove(relativeValue)
+            df = df[sum([[relativeValue], columns], [])]
+
+        # Get gene symbols
+        geneSymbolFromId = geneInfo.loc[df.index, 'symbol'].fillna('').to_dict()
+        geneSymbols = [geneSymbolFromId.get(geneId, geneId) for geneId in df.index]
+
+        return {'filtered':list(filtered), 'unfiltered':list(unfiltered), 'notFound':list(notFound), 'geneSymbols':geneSymbols, 'dataframe':df}
+
 # ----------------------------------------------------------
 # tests: eg. $nosetests -s <filename>:ClassName.func_name
 # ----------------------------------------------------------
@@ -348,6 +421,10 @@ def test_capybara():
     print(len(output), time.time()-t0)
     assert output['Cell Type'].at['2000_1699538155_A','monocyte']<0.001
     assert round(output['Cell Type'].at['2000_1699538155_C','cDC1']*100)==48
+
+def test_heatmapData():
+    atlas = Atlas('ma')
+    atlas.heatmapData(genesetCollection='Hallmark', genesetName='HALLMARK_ADIPOGENESIS', groupby='treatment', relativeValue='NS')
 
 def test_rankTransform():
     #df = pandas.DataFrame([[0, 0, 0, 3, 5, 7, 11]]).transpose()

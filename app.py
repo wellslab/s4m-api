@@ -51,8 +51,9 @@ api.add_resource(datasets.Download, '/download')
 api.add_resource(genes.SampleGroupToGenes, '/genes/sample-group-to-genes')
 api.add_resource(genes.GeneToSampleGroups, '/genes/gene-to-sample-groups')
 #api.add_resource(genes.GenesetCollection, '/genes/geneset-collection')
+
 # Gene sets
-api.add_resource(genes.GenesetTable, '/genes/geneset-table')
+api.add_resource(genes.GenesetCollections, '/genes/geneset-collections')
 
 # Atlas data
 api.add_resource(atlases.AtlasTypes, '/atlas-types')

@@ -3,10 +3,8 @@ from flask import send_from_directory
 
 from models import atlases, datasets
 from resources import auth, errors
-from datetime import datetime
-import pandas as pd
 
-import os, werkzeug, pandas, json, uuid, pathlib, csv
+import os, werkzeug, pandas, json #, uuid, pathlib, csv
 
 class AtlasTypes(Resource):
     def get(self):
@@ -20,16 +18,26 @@ class Atlas(Resource):
         """
         # Note that these arguments will not be case sensitive, coming from URL
         parser = reqparse.RequestParser()
-        parser.add_argument('version', type=str, required=False)
-        parser.add_argument('orient', type=str, required=False, default="records")
-        parser.add_argument('filtered', type=str, required=False, default='false')
-        parser.add_argument('query_string', type=str, required=False, default="")
-        parser.add_argument('gene_id', type=str, required=False)  # comma separated list of strings
-        parser.add_argument('as_file', type=bool, required=False, default=False)
+        parser.add_argument('version', type=str, required=False)    # specify to get info from a specific version of the atlas
+        parser.add_argument('orient', type=str, required=False, default="records")  # when returning data frames
+        parser.add_argument('filtered', type=str, required=False, default='false')  # for expression values (use filtered genes)
+        parser.add_argument('query_string', type=str, required=False, default="")   # for possible-genes (all genes which belong to the atlas)
+        parser.add_argument('gene_id', type=str, required=False)  # for expression-values and heatmap-data: comma separated list of strings
+        parser.add_argument('as_file', type=bool, required=False, default=False)  # download some data frames as file
+
+        # More specific to heatmap-data:
+        parser.add_argument('cluster_columns', type=str, required=False, default='true')
+        parser.add_argument('groupby', type=str, required=False)  # eg. "treatment"
+        parser.add_argument('subsetby', type=str, required=False)  # eg. "time"
+        parser.add_argument('subsetby_item', type=str, required=False)  # eg. "2hr"
+        parser.add_argument('relative_value', type=str, required=False, default="zscore")  # calculate row values relative to this
+
         args = parser.parse_args()
+        filtered = args.get('filtered').lower().startswith('t')
+        clusterColumns = args.get('cluster_columns').lower().startswith('t')
 
         atlas = atlases.Atlas(atlasType, version=args.get('version'))
-        filtered = args.get('filtered').lower().startswith('t')
+        
         if item=="coordinates":
             df = atlas.pcaCoordinates()
             filepath = os.path.join(atlas.atlasFilePath, "coordinates.tsv")
@@ -61,6 +69,13 @@ class Atlas(Resource):
             df = df[df["symbol"].str.lower().str.startswith(args.get("query_string").lower())]
             return df.sort_values(["inclusion","symbol"], ascending=[False,True]).reset_index().to_dict(orient="records")
         
+        elif item=="heatmap-data":
+            geneIds = args.get('gene_id').split(',') if args.get('gene_id') is not None else []
+            result = atlas.heatmapData(geneIds=geneIds, clusterColumns=clusterColumns, groupby=args.get('groupby'), 
+                                       subsetby=args.get('subsetby'), subsetbyItem=args.get('subsetby_item'), relativeValue=args.get('relative_value'))
+            result['dataframe'] = result['dataframe'].to_dict(orient='split')
+            return result
+            
         else:
             return []
 
