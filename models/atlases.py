@@ -349,7 +349,7 @@ class Atlas(object):
             columns = df.columns.tolist()
             columns.remove(relativeValue)
             df = df[sum([[relativeValue], columns], [])]
-
+        
         # Get gene symbols
         geneSymbolFromId = geneInfo.loc[df.index, 'symbol'].fillna('').to_dict()
         geneSymbols = [geneSymbolFromId.get(geneId, geneId) for geneId in df.index]

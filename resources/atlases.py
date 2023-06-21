@@ -22,19 +22,11 @@ class Atlas(Resource):
         parser.add_argument('orient', type=str, required=False, default="records")  # when returning data frames
         parser.add_argument('filtered', type=str, required=False, default='false')  # for expression values (use filtered genes)
         parser.add_argument('query_string', type=str, required=False, default="")   # for possible-genes (all genes which belong to the atlas)
-        parser.add_argument('gene_id', type=str, required=False)  # for expression-values and heatmap-data: comma separated list of strings
+        parser.add_argument('gene_id', type=str, required=False)  # for expression-values: comma separated list of strings
         parser.add_argument('as_file', type=bool, required=False, default=False)  # download some data frames as file
-
-        # More specific to heatmap-data:
-        parser.add_argument('cluster_columns', type=str, required=False, default='true')
-        parser.add_argument('groupby', type=str, required=False)  # eg. "treatment"
-        parser.add_argument('subsetby', type=str, required=False)  # eg. "time"
-        parser.add_argument('subsetby_item', type=str, required=False)  # eg. "2hr"
-        parser.add_argument('relative_value', type=str, required=False, default="rowAverage")  # calculate row values relative to this
 
         args = parser.parse_args()
         filtered = args.get('filtered').lower().startswith('t')
-        clusterColumns = args.get('cluster_columns').lower().startswith('t')
 
         atlas = atlases.Atlas(atlasType, version=args.get('version'))
         
@@ -68,14 +60,7 @@ class Atlas(Resource):
             df = atlas.geneInfo().fillna("")
             df = df[df["symbol"].str.lower().str.startswith(args.get("query_string").lower())]
             return df.sort_values(["inclusion","symbol"], ascending=[False,True]).reset_index().to_dict(orient="records")
-        
-        elif item=="heatmap-data":
-            geneIds = args.get('gene_id').split(',') if args.get('gene_id') is not None else []
-            result = atlas.heatmapData(geneIds=geneIds, clusterColumns=clusterColumns, groupby=args.get('groupby'), 
-                                       subsetby=args.get('subsetby'), subsetbyItem=args.get('subsetby_item'), relativeValue=args.get('relative_value'))
-            result['dataframe'] = result['dataframe'].to_dict(orient='split')
-            return result
-            
+                    
         else:
             return []
 
@@ -109,7 +94,6 @@ class AtlasProjection(Resource):
             return {'error': 'The sample column must be a column that exists in the sample matrix. Check the sample column.'}
         
         return {'error': ""}
-
 
     def post(self, atlasType, dataSource):
         """Project data onto the atlas of atlasType. dataSource is one of  ['stemformatics','user'].
@@ -186,20 +170,40 @@ class AtlasProjection(Resource):
         except:
             raise errors.DatasetProjectionFailedError
 
-# Get - encaapsulates all parameters in URL, Post - from form submitted to server
-# Return JSON object to UI server
-class AtlasProjectionResults(Resource):
-    
-    def get(self):
+class AtlasHeatmap(Resource):
+    def post(self, atlasType):
         parser = reqparse.RequestParser()
-        parser.add_argument("id", type=str, required=False)
+        parser.add_argument('gene_id', type=str, required=True)  # comma separated list of strings
+        parser.add_argument('cluster_columns', type=str, required=False, default='true')
+        parser.add_argument('groupby', type=str, required=False)  # eg. "treatment"
+        parser.add_argument('subsetby', type=str, required=False)  # eg. "time"
+        parser.add_argument('subsetby_item', type=str, required=False)  # eg. "2hr"
+        parser.add_argument('relative_value', type=str, required=False, default="rowAverage")  # calculate row values relative to this
         args = parser.parse_args()
-        id = args.get("id")
 
-        # Return JSON object from userID folder
-        path = "/../mnt/stemformatics-data/user_projection_data/{}/output.json".format(id)
-        with open(path, 'r') as f:
-            result = json.load(f)
+        clusterColumns = args.get('cluster_columns').lower().startswith('t')
+        geneIds = args.get('gene_id').split(',') if args.get('gene_id') is not None else []
 
+        atlas = atlases.Atlas(atlasType, version=args.get('version'))
+        result = atlas.heatmapData(geneIds=geneIds, clusterColumns=clusterColumns, groupby=args.get('groupby'), 
+                                subsetby=args.get('subsetby'), subsetbyItem=args.get('subsetby_item'), relativeValue=args.get('relative_value'))
+        result['dataframe'] = result['dataframe'].to_dict(orient='split')
         return result
+
+
+# Prototype code for supporting single cell data upload via job system. Currently not used.
+# class AtlasProjectionResults(Resource):
+    
+#     def get(self):
+#         parser = reqparse.RequestParser()
+#         parser.add_argument("id", type=str, required=False)
+#         args = parser.parse_args()
+#         id = args.get("id")
+
+#         # Return JSON object from userID folder
+#         path = "/../mnt/stemformatics-data/user_projection_data/{}/output.json".format(id)
+#         with open(path, 'r') as f:
+#             result = json.load(f)
+
+#         return result
 

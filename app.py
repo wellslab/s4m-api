@@ -57,8 +57,9 @@ api.add_resource(genes.GenesetCollections, '/genes/geneset-collections')
 
 # Atlas data
 api.add_resource(atlases.AtlasTypes, '/atlas-types')
-api.add_resource(atlases.Atlas, '/atlases/<atlasType>/<item>')
+api.add_resource(atlases.Atlas, '/atlases/<atlasType>/<item>')  # eg. /atlases/myeloid/samples
 api.add_resource(atlases.AtlasProjection, '/atlas-projection/<atlasType>/<dataSource>')
+api.add_resource(atlases.AtlasHeatmap, '/atlas-heatmap/<atlasType>')
 #api.add_resource(atlases.AtlasProjectionResults, '/atlas-projection-results')
 
 # API for authentication
