@@ -30,7 +30,7 @@ class Atlas(Resource):
         parser.add_argument('groupby', type=str, required=False)  # eg. "treatment"
         parser.add_argument('subsetby', type=str, required=False)  # eg. "time"
         parser.add_argument('subsetby_item', type=str, required=False)  # eg. "2hr"
-        parser.add_argument('relative_value', type=str, required=False, default="zscore")  # calculate row values relative to this
+        parser.add_argument('relative_value', type=str, required=False, default="rowAverage")  # calculate row values relative to this
 
         args = parser.parse_args()
         filtered = args.get('filtered').lower().startswith('t')

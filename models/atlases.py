@@ -329,8 +329,10 @@ class Atlas(object):
         if len(df.columns)<=1:  # application of subset + groupby reduced the matrix too much
             return {'dataframe':pandas.DataFrame(), 'error':'Not enough samples to render a heatmap.'}
         
-        # Apply values relative to relativeValue
-        if relativeValue=='zscore':  # use zscore on each row
+        # Transform values according to relativeValue
+        if relativeValue=='rowAverage':
+            df = df.sub(df.mean(axis=1), axis=0)
+        elif relativeValue=='zscore':  # use zscore on each row
             from scipy.stats import zscore
             df = df.apply(zscore, axis=1)
         elif relativeValue in df.columns:  # subtract this for each value
