@@ -349,6 +349,9 @@ class Atlas(object):
             columns = df.columns.tolist()
             columns.remove(relativeValue)
             df = df[sum([[relativeValue], columns], [])]
+
+        # Cluster rows
+        df = df.loc[hclusteredRows(df)]
         
         # Get gene symbols
         geneSymbolFromId = geneInfo.loc[df.index, 'symbol'].fillna('').to_dict()

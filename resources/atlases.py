@@ -38,7 +38,7 @@ class Atlas(Resource):
             df = atlas.sampleMatrix().fillna('')
             filepath = os.path.join(atlas.atlasFilePath, "samples.tsv")
 
-        elif item=="expression-values":  # subset expression matrix on gene ids specified
+        elif item=="expression-values":  # subset expression matrix on gene ids specified - note we're assuming geneIds are all in expressionMatrix(filtered=true)
             geneIds = args.get('gene_id').split(',') if args.get('gene_id') is not None else []
             df = atlas.expressionMatrix(filtered=filtered).loc[geneIds]
         
