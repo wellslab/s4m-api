@@ -317,6 +317,9 @@ class Atlas(object):
         df = self.expressionMatrix(filtered=True).loc[list(filtered)]
         samples = self.sampleMatrix()
 
+        if len(df)<=1:  # Not enough common gene (one gene can't be used to calculate distance matrix)
+            return {'dataframe':pandas.DataFrame(), 'error':'No common genes found between gene set and atlas expression matrix.'}
+
         # Apply any subsetby
         if subsetby is not None:
             samples = samples[samples[subsetby]==subsetbyItem]
@@ -327,7 +330,7 @@ class Atlas(object):
             df = df[samples.index].groupby(samples[groupby], axis=1).mean()
 
         if len(df.columns)<=1:  # application of subset + groupby reduced the matrix too much
-            return {'dataframe':pandas.DataFrame(), 'error':'Not enough samples to render a heatmap.'}
+            return {'dataframe':pandas.DataFrame(), 'error':'Not enough samples to render a heatmap. Try a different subset of samples or no subset.'}
         
         # Transform values according to relativeValue
         if relativeValue=='rowAverage':
@@ -401,10 +404,10 @@ def test_atlas():
     assert set(colours.keys()).issubset(set(samples.columns))
     for key,val in colours.items():
         assert set(val.keys()).issubset(set(samples[key]))
-
+    
     assert set(ordering.keys()).issubset(set(samples.columns))
-    for key,val in ordering.items():
-        assert set(val).issubset(set(samples[key]))
+    for key,val in ordering.items():  # ordering may have blanks to create space on the atlas legend        
+        assert set([item for item in val if item!=""]).issubset(set(samples[key]))
 
 def test_projection():
     from models import datasets
