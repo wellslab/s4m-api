@@ -196,9 +196,11 @@ class Atlas(object):
         dfQuery = rankTransform(queryData.reindex(df.index).fillna(0))
 
         if includeRandomSamples:
-            n = 3 if len(dfQuery.columns)>2 else len(dfQuery.columns)  # max 3 random columns chosen from dfQuery
-            for i,col in enumerate(random.sample(dfQuery.columns.tolist(), n)):  # add new column based on values of these columns
-                dfQuery[f"random_{i}"] = random.sample(dfQuery[col].tolist(), len(dfQuery))
+            # Initially I tried to create random samples based on dfQuery, randomly scrambling values from selected columns of query,
+            # but the results were inconsitent and too dependent on query data. Now switched to using atlas data to generate random samples.
+            allValues = df.to_numpy().flatten().tolist()
+            for i in range(3): # 3 random samples
+                dfQuery[f"random_{i}"] = random.sample(allValues, len(dfQuery))
 
         # perform pca on atlas
         from sklearn.decomposition import PCA
