@@ -132,7 +132,7 @@ def geneToSampleGroups(geneId, sampleGroup='cell_type'):
             continue
 
         # get values of the gene aligned to samples
-        values = df.loc[geneId][samples.index]
+        values = df.loc[geneId][samples.index.intersection(df.columns)]
 
         mean = values.groupby(samples[sampleGroup]).mean().round()
         var = mean.var()
